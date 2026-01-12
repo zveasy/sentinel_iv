@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Sentinel-IV MVP Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    h1 { margin-bottom: 6px; }
+    .meta { color: #444; margin-bottom: 16px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f3f3f3; }
+    .status-drift { background: #fff2cc; }
+    .status-missing_baseline { background: #f8d7da; }
+    .status-missing_current { background: #f8d7da; }
+    .status-missing_value { background: #f8d7da; }
+    .status { font-weight: bold; }
+    details { margin-top: 16px; }
+    pre { background: #f8f9fa; padding: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Run Health Report</h1>
+  <div class="meta">Run ID: run-001 | Baseline: base-001</div>
+  <div class="status">Summary: PASS-with-drift</div>
+  <div class="meta">Metrics: 3 | Drift: 1</div>
+  <h2>Metric Comparison</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Baseline</th>
+        <th>Current</th>
+        <th>Delta</th>
+        <th>Threshold</th>
+        <th>Unit</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="status-ok"><td>error_count</td><td>2</td><td>2</td><td>0</td><td>0</td><td></td><td>ok</td></tr>
+<tr class="status-drift"><td>reset_count</td><td>0</td><td>3</td><td>3</td><td>1</td><td></td><td>drift</td></tr>
+<tr class="status-ok"><td>watchdog_triggers</td><td>0</td><td>0</td><td>0</td><td>None</td><td></td><td>ok</td></tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>Config</summary>
+    <pre>Config hash: config-001
+Template: default</pre>
+    <pre>{
+  &quot;error_count&quot;: {
+    &quot;drift_threshold&quot;: 0
+  },
+  &quot;reset_count&quot;: {
+    &quot;drift_threshold&quot;: 1
+  }
+}</pre>
+  </details>
+</body>
+</html>

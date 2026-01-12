@@ -1,0 +1,32 @@
+{
+  "name": "hypothetical_lab",
+  "required": [
+    "reset_count",
+    "watchdog_triggers",
+    "power_warning_count",
+    "avg_latency_ms",
+    "max_latency_ms",
+    "error_code_frequency",
+    "missed_deadlines"
+  ],
+  "optional": [
+    "rf_noise_floor_db",
+    "state_transition_anomalies"
+  ],
+  "defaults": {
+    "rf_noise_floor_db": "-95",
+    "state_transition_anomalies": "0"
+  },
+  "mapping": {
+    "Reset Count": "reset_count",
+    "Watchdog Triggers": "watchdog_triggers",
+    "Power Warning Count": "power_warning_count",
+    "Avg Task Latency (ms)": "avg_latency_ms",
+    "Max Task Latency (ms)": "max_latency_ms",
+    "Error Code Frequency": "error_code_frequency",
+    "Missed Deadlines": "missed_deadlines",
+    "RF Noise Floor (dB)": "rf_noise_floor_db",
+    "State Transition Anomalies": "state_transition_anomalies"
+  },
+  "allow_extra": false
+}

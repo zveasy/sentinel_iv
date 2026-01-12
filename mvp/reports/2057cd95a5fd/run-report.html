@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Sentinel-IV MVP Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    h1 { margin-bottom: 6px; }
+    .meta { color: #444; margin-bottom: 16px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f3f3f3; }
+    .status-drift { background: #fff2cc; }
+    .status-missing_baseline { background: #f8d7da; }
+    .status-missing_current { background: #f8d7da; }
+    .status-missing_value { background: #f8d7da; }
+    .status { font-weight: bold; }
+    details { margin-top: 16px; }
+    pre { background: #f8f9fa; padding: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Run Health Report</h1>
+  <div class="meta">Run ID: 2057cd95a5fd | Baseline: 11dd1b631297</div>
+  <div class="status">Summary: PASS-with-drift</div>
+  <div class="meta">Metrics: 9 | Drift: 1</div>
+  <h2>Metric Comparison</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Baseline</th>
+        <th>Current</th>
+        <th>Delta</th>
+        <th>Threshold</th>
+        <th>Unit</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="status-ok"><td>avg_latency_ms</td><td>12.2</td><td>12.9</td><td>0.7000000000000011</td><td>1.0</td><td>"ms"</td><td>ok</td></tr>
+<tr class="status-ok"><td>error_code_frequency</td><td>0.01</td><td>0.03</td><td>0.019999999999999997</td><td>0.05</td><td></td><td>ok</td></tr>
+<tr class="status-drift"><td>max_latency_ms</td><td>22.1</td><td>27.5</td><td>5.399999999999999</td><td>5.0</td><td>"ms"</td><td>drift</td></tr>
+<tr class="status-ok"><td>missed_deadlines</td><td>0</td><td>1</td><td>1</td><td>1</td><td></td><td>ok</td></tr>
+<tr class="status-ok"><td>power_warning_count</td><td>0</td><td>1</td><td>1</td><td>2</td><td></td><td>ok</td></tr>
+<tr class="status-ok"><td>reset_count</td><td>0</td><td>1</td><td>1</td><td>1</td><td></td><td>ok</td></tr>
+<tr class="status-ok"><td>rf_noise_floor_db</td><td>-95</td><td>-97</td><td>-2</td><td>None</td><td></td><td>ok</td></tr>
+<tr class="status-ok"><td>state_transition_anomalies</td><td>0</td><td>2</td><td>2</td><td>None</td><td></td><td>ok</td></tr>
+<tr class="status-ok"><td>watchdog_triggers</td><td>0</td><td>0</td><td>0</td><td>1</td><td></td><td>ok</td></tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>Config</summary>
+    <pre>Config hash: 6696b16068ff
+Template: none</pre>
+    <pre>{
+  &quot;avg_latency_ms&quot;: {
+    &quot;drift_threshold&quot;: 1.0,
+    &quot;type&quot;: &quot;\&quot;numeric\&quot;&quot;,
+    &quot;unit&quot;: &quot;\&quot;ms\&quot;&quot;,
+    &quot;unit_map&quot;: {
+      &quot;ms&quot;: 1,
+      &quot;s&quot;: 1000,
+      &quot;us&quot;: 0.001
+    }
+  },
+  &quot;error_code_frequency&quot;: {
+    &quot;drift_threshold&quot;: 0.05,
+    &quot;type&quot;: &quot;\&quot;rate\&quot;&quot;,
+    &quot;unit&quot;: null,
+    &quot;unit_map&quot;: {}
+  },
+  &quot;max_latency_ms&quot;: {
+    &quot;drift_threshold&quot;: 5.0,
+    &quot;type&quot;: &quot;\&quot;numeric\&quot;&quot;,
+    &quot;unit&quot;: &quot;\&quot;ms\&quot;&quot;,
+    &quot;unit_map&quot;: {
+      &quot;ms&quot;: 1,
+      &quot;s&quot;: 1000,
+      &quot;us&quot;: 0.001
+    }
+  },
+  &quot;missed_deadlines&quot;: {
+    &quot;drift_threshold&quot;: 1,
+    &quot;type&quot;: &quot;\&quot;count\&quot;&quot;,
+    &quot;unit&quot;: null,
+    &quot;unit_map&quot;: {}
+  },
+  &quot;power_warning_count&quot;: {
+    &quot;drift_threshold&quot;: 2,
+    &quot;type&quot;: &quot;\&quot;count\&quot;&quot;,
+    &quot;unit&quot;: null,
+    &quot;unit_map&quot;: {}
+  },
+  &quot;reset_count&quot;: {
+    &quot;drift_threshold&quot;: 1,
+    &quot;type&quot;: &quot;\&quot;count\&quot;&quot;,
+    &quot;unit&quot;: null,
+    &quot;unit_map&quot;: {}
+  },
+  &quot;watchdog_triggers&quot;: {
+    &quot;drift_threshold&quot;: 1,
+    &quot;type&quot;: &quot;\&quot;count\&quot;&quot;,
+    &quot;unit&quot;: null,
+    &quot;unit_map&quot;: {}
+  }
+}</pre>
+  </details>
+</body>
+</html>

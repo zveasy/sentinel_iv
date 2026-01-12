@@ -1,0 +1,92 @@
+{
+  "run_id": "2057cd95a5fd",
+  "baseline_id": "11dd1b631297",
+  "baseline_tag": null,
+  "summary": "PASS-with-drift",
+  "config_hash": "6696b16068ff",
+  "template": null,
+  "metrics": [
+    {
+      "name": "avg_latency_ms",
+      "baseline": 12.2,
+      "current": 12.9,
+      "delta": 0.7000000000000011,
+      "threshold": 1.0,
+      "unit": "\"ms\"",
+      "status": "ok"
+    },
+    {
+      "name": "error_code_frequency",
+      "baseline": 0.01,
+      "current": 0.03,
+      "delta": 0.019999999999999997,
+      "threshold": 0.05,
+      "unit": null,
+      "status": "ok"
+    },
+    {
+      "name": "max_latency_ms",
+      "baseline": 22.1,
+      "current": 27.5,
+      "delta": 5.399999999999999,
+      "threshold": 5.0,
+      "unit": "\"ms\"",
+      "status": "drift"
+    },
+    {
+      "name": "missed_deadlines",
+      "baseline": 0,
+      "current": 1,
+      "delta": 1,
+      "threshold": 1,
+      "unit": null,
+      "status": "ok"
+    },
+    {
+      "name": "power_warning_count",
+      "baseline": 0,
+      "current": 1,
+      "delta": 1,
+      "threshold": 2,
+      "unit": null,
+      "status": "ok"
+    },
+    {
+      "name": "reset_count",
+      "baseline": 0,
+      "current": 1,
+      "delta": 1,
+      "threshold": 1,
+      "unit": null,
+      "status": "ok"
+    },
+    {
+      "name": "rf_noise_floor_db",
+      "baseline": -95,
+      "current": -97,
+      "delta": -2,
+      "threshold": null,
+      "unit": null,
+      "status": "ok"
+    },
+    {
+      "name": "state_transition_anomalies",
+      "baseline": 0,
+      "current": 2,
+      "delta": 2,
+      "threshold": null,
+      "unit": null,
+      "status": "ok"
+    },
+    {
+      "name": "watchdog_triggers",
+      "baseline": 0,
+      "current": 0,
+      "delta": 0,
+      "threshold": 1,
+      "unit": null,
+      "status": "ok"
+    }
+  ],
+  "notes": ""
+}

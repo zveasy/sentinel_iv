@@ -1,0 +1,16 @@
+{
+  "name": "basic_metrics",
+  "required": [
+    "reset_count",
+    "watchdog_triggers",
+    "power_warning_count",
+    "avg_latency_ms",
+    "max_latency_ms",
+    "error_code_frequency",
+    "missed_deadlines"
+  ],
+  "optional": [],
+  "defaults": {},
+  "mapping": {},
+  "allow_extra": true
+}

@@ -1,0 +1,64 @@
+{
+  "run_id": "2026-01-11T21-54-01Z_current-run",
+  "baseline_id": "baseline-run",
+  "summary": "PASS-with-drift",
+  "metrics": [
+    {
+      "name": "avg_latency_ms",
+      "baseline": 12.4,
+      "current": 12.8,
+      "delta": 0.40000000000000036,
+      "threshold": 1.0,
+      "status": "ok"
+    },
+    {
+      "name": "error_code_frequency",
+      "baseline": 0.01,
+      "current": 0.07,
+      "delta": 0.060000000000000005,
+      "threshold": 0.05,
+      "status": "drift"
+    },
+    {
+      "name": "max_latency_ms",
+      "baseline": 22.1,
+      "current": 27.5,
+      "delta": 5.399999999999999,
+      "threshold": 5.0,
+      "status": "drift"
+    },
+    {
+      "name": "missed_deadlines",
+      "baseline": 0,
+      "current": 1,
+      "delta": 1,
+      "threshold": 1,
+      "status": "ok"
+    },
+    {
+      "name": "power_warning_count",
+      "baseline": 0,
+      "current": 1,
+      "delta": 1,
+      "threshold": 2,
+      "status": "ok"
+    },
+    {
+      "name": "reset_count",
+      "baseline": 0,
+      "current": 3,
+      "delta": 3,
+      "threshold": 1,
+      "status": "drift"
+    },
+    {
+      "name": "watchdog_triggers",
+      "baseline": 0,
+      "current": 1,
+      "delta": 1,
+      "threshold": 1,
+      "status": "ok"
+    }
+  ],
+  "notes": ""
+}

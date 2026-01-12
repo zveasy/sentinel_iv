@@ -1,0 +1,16 @@
+templates:
+  default:
+    - reset_count
+    - watchdog_triggers
+    - power_warning_count
+    - avg_latency_ms
+    - max_latency_ms
+    - error_code_frequency
+    - missed_deadlines
+  latency:
+    - avg_latency_ms
+    - max_latency_ms
+  stability:
+    - reset_count
+    - watchdog_triggers
+    - missed_deadlines

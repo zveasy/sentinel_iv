@@ -1,0 +1,32 @@
+metrics:
+  reset_count:
+    type: "count"
+    drift_threshold: 1
+  watchdog_triggers:
+    type: "count"
+    drift_threshold: 1
+  power_warning_count:
+    type: "count"
+    drift_threshold: 2
+  avg_latency_ms:
+    type: "numeric"
+    drift_threshold: 1.0
+    unit: "ms"
+    unit_map:
+      s: 1000
+      ms: 1
+      us: 0.001
+  max_latency_ms:
+    type: "numeric"
+    drift_threshold: 5.0
+    unit: "ms"
+    unit_map:
+      s: 1000
+      ms: 1
+      us: 0.001
+  error_code_frequency:
+    type: "rate"
+    drift_threshold: 0.05
+  missed_deadlines:
+    type: "count"
+    drift_threshold: 1

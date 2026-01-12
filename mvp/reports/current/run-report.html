@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Sentinel-IV MVP Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    h1 { margin-bottom: 6px; }
+    .meta { color: #444; margin-bottom: 16px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f3f3f3; }
+    .status { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Run Health Report</h1>
+  <div class="meta">Run ID: 2026-01-11T21-49-29Z_current-run | Baseline: baseline-run</div>
+  <div class="status">Summary: PASS-with-drift</div>
+  <h2>Metric Comparison</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Baseline</th>
+        <th>Current</th>
+        <th>Delta</th>
+        <th>Threshold</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>avg_latency_ms</td><td>12.4</td><td>12.8</td><td>0.40000000000000036</td><td>1.0</td><td>ok</td></tr>
+<tr><td>error_code_frequency</td><td>0.01</td><td>0.07</td><td>0.060000000000000005</td><td>0.05</td><td>drift</td></tr>
+<tr><td>max_latency_ms</td><td>22.1</td><td>27.5</td><td>5.399999999999999</td><td>5.0</td><td>drift</td></tr>
+<tr><td>missed_deadlines</td><td>0</td><td>1</td><td>1</td><td>1</td><td>ok</td></tr>
+<tr><td>power_warning_count</td><td>0</td><td>1</td><td>1</td><td>2</td><td>ok</td></tr>
+<tr><td>reset_count</td><td>0</td><td>3</td><td>3</td><td>1</td><td>drift</td></tr>
+<tr><td>watchdog_triggers</td><td>0</td><td>1</td><td>1</td><td>1</td><td>ok</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>

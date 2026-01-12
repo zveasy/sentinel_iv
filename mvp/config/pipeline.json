@@ -1,0 +1,29 @@
+{
+  "sources": {
+    "basic_csv": {
+      "parser": "mvp.parsers.csv_parser",
+      "schema": "mvp/schemas/basic_metrics.json",
+      "metrics": "mvp.metrics.pass_through"
+    },
+    "basic_log": {
+      "parser": "mvp.parsers.log_parser",
+      "schema": "mvp/schemas/basic_metrics.json",
+      "metrics": "mvp.metrics.pass_through"
+    },
+    "basic_excel": {
+      "parser": "mvp.parsers.excel_parser",
+      "schema": "mvp/schemas/basic_metrics.json",
+      "metrics": "mvp.metrics.pass_through"
+    },
+    "pba_excel": {
+      "parser": "mvp.parsers.excel_parser",
+      "schema": "mvp/schemas/pba_excel.json",
+      "metrics": "mvp.metrics.pass_through"
+    },
+    "hypothetical_csv": {
+      "parser": "mvp.parsers.table_csv_parser",
+      "schema": "mvp/schemas/hypothetical_lab.json",
+      "metrics": "mvp.metrics.pass_through"
+    }
+  }
+}

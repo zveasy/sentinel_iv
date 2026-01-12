@@ -1,0 +1,8 @@
+# Sample log metrics
+reset_count: 3
+watchdog_triggers: 1
+power_warning_count: 1
+avg_latency_ms: 12.8
+max_latency_ms: 27.5
+error_code_frequency: 0.07
+missed_deadlines: 1

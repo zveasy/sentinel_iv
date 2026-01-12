@@ -1,0 +1,74 @@
+{
+  "run_id": "6bb2ab74305d",
+  "baseline_id": "7fe4b1532f74",
+  "baseline_tag": null,
+  "summary": "PASS-with-drift",
+  "config_hash": "6696b16068ff",
+  "template": null,
+  "metrics": [
+    {
+      "name": "avg_latency_ms",
+      "baseline": 12.4,
+      "current": 12.8,
+      "delta": 0.40000000000000036,
+      "threshold": 1.0,
+      "unit": "\"ms\"",
+      "status": "ok"
+    },
+    {
+      "name": "error_code_frequency",
+      "baseline": 0.01,
+      "current": 0.07,
+      "delta": 0.060000000000000005,
+      "threshold": 0.05,
+      "unit": null,
+      "status": "drift"
+    },
+    {
+      "name": "max_latency_ms",
+      "baseline": 22.1,
+      "current": 27.5,
+      "delta": 5.399999999999999,
+      "threshold": 5.0,
+      "unit": "\"ms\"",
+      "status": "drift"
+    },
+    {
+      "name": "missed_deadlines",
+      "baseline": 0,
+      "current": 1,
+      "delta": 1,
+      "threshold": 1,
+      "unit": null,
+      "status": "ok"
+    },
+    {
+      "name": "power_warning_count",
+      "baseline": 0,
+      "current": 1,
+      "delta": 1,
+      "threshold": 2,
+      "unit": null,
+      "status": "ok"
+    },
+    {
+      "name": "reset_count",
+      "baseline": 0,
+      "current": 3,
+      "delta": 3,
+      "threshold": 1,
+      "unit": null,
+      "status": "drift"
+    },
+    {
+      "name": "watchdog_triggers",
+      "baseline": 0,
+      "current": 1,
+      "delta": 1,
+      "threshold": 1,
+      "unit": null,
+      "status": "ok"
+    }
+  ],
+  "notes": ""
+}

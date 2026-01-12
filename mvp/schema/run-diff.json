@@ -1,0 +1,29 @@
+{
+  "run_id": "2025-01-01T12-00-00Z_current",
+  "baseline_id": "2024-12-15T09-30-00Z_baseline",
+  "summary": "PASS-with-drift",
+  "config_hash": "8f3c0d3a1b7c",
+  "template": "default",
+  "baseline_tag": "golden",
+  "metrics": [
+    {
+      "name": "reset_count",
+      "baseline": 0,
+      "current": 3,
+      "delta": 3,
+      "threshold": 1,
+      "unit": null,
+      "status": "drift"
+    },
+    {
+      "name": "avg_latency_ms",
+      "baseline": 12.4,
+      "current": 12.8,
+      "delta": 0.4,
+      "threshold": 1.0,
+      "unit": "ms",
+      "status": "ok"
+    }
+  ],
+  "notes": "Drift flagged on reset_count and error_code_frequency."
+}
