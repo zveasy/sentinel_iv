@@ -1,10 +1,12 @@
 import json
 import os
+import time
 from argparse import Namespace
 
 import pytest
 
 from hb import cli
+from hb.adapters import pba_excel_adapter
 
 
 def _case_dir(case_name):
@@ -89,3 +91,23 @@ def test_cases(tmp_path, case_name):
             assert warning in report.get("warnings", [])
     if "baseline_reason" in expected:
         assert report.get("baseline_reason") == expected["baseline_reason"]
+
+
+def test_streaming_excel_unit_sheet():
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    sample = os.path.join(root, "samples", "pba_unit_sheet_example.xlsx")
+    metrics = pba_excel_adapter.parse_stream(sample)
+    assert "avg_latency_ms" in metrics
+    assert metrics["avg_latency_ms"]["unit"] == "ms"
+
+
+def test_streaming_benchmark_threshold():
+    bench_file = os.environ.get("HB_BENCH_FILE")
+    max_seconds = os.environ.get("HB_BENCH_MAX_S")
+    if not bench_file or not max_seconds:
+        pytest.skip("HB_BENCH_FILE or HB_BENCH_MAX_S not set")
+    max_seconds = float(max_seconds)
+    start = time.time()
+    pba_excel_adapter.parse_stream(bench_file)
+    elapsed = time.time() - start
+    assert elapsed <= max_seconds, f"streaming took {elapsed:.3f}s, max {max_seconds}s"

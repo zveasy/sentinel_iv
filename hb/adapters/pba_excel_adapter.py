@@ -81,8 +81,11 @@ def _load_rows_xlsx_streaming(path):
                 header_norm = {normalize_alias(str(c)) for c in header if c}
                 if "current" not in header_norm and "value" not in header_norm:
                     header = _merge_header_rows(header, header_next)
+                    found_data = True
+                    continue
+                # Header already complete; treat this row as data.
                 found_data = True
-                continue
+                row = header_next
 
             if not found_data:
                 continue

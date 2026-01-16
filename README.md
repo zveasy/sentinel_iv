@@ -137,6 +137,8 @@ Artifacts:
 - Reports are written to `mvp/reports/<run_id>/` as `drift_report.json` and `drift_report.html`.
 - Optional PDF export uses `wkhtmltopdf` if installed (`drift_report.pdf`).
 - If `wkhtmltopdf` is not available, a pure-Python fallback uses `fpdf2`.
+- Each report folder includes `artifact_manifest.json` and `audit_log.jsonl`.
+- Optional encryption/signing: use `--encrypt-key` and `--sign-key` with `bin/hb analyze` or `bin/hb run`.
 
 Streaming examples:
 ```
@@ -174,6 +176,78 @@ open mvp/reports/<run_id>/drift_report.html
 4) Confirm drift status and top metrics:
 ```
 jq -r '.status, .baseline_run_id, (.top_drifts[]?.metric // empty)' mvp/reports/<run_id>/drift_report.json
+```
+
+Security/Compliance helpers:
+```
+bin/hb analyze --run runs/<run_id>/ --sign-key keys/signing.key
+bin/hb analyze --run runs/<run_id>/ --encrypt-key keys/encryption.key
+bin/hb verify --report-dir mvp/reports/<run_id> --sign-key keys/signing.key
+python tools/generate_sbom.py --out SBOM.md
+```
+
+SQLCipher (option 2) for encrypted runs.db:
+```
+chmod +x tools/sqlcipher_encrypt_db.sh
+chmod +x tools/sqlcipher_decrypt_db.sh
+tools/sqlcipher_encrypt_db.sh runs.db runs_encrypted.db "my-secret-key"
+tools/sqlcipher_decrypt_db.sh runs_encrypted.db runs.db "my-secret-key"
+```
+
+SQLCipher wrapper commands:
+```
+bin/hb db encrypt --input runs.db --output runs_encrypted.db --key "my-secret-key"
+bin/hb db decrypt --input runs_encrypted.db --output runs.db --key "my-secret-key"
+```
+
+Notes:
+- If the output database exists, the scripts move it to a timestamped `.bak` before writing.
+
+Multi-user lab guidance:
+- Set shared paths via environment variables:
+  - `HB_DB_PATH=/shared/hb/runs.db`
+  - `HB_REPORTS_DIR=/shared/hb/reports`
+  - `HB_METRIC_REGISTRY=/shared/hb/metric_registry.yaml`
+  - `HB_BASELINE_POLICY=/shared/hb/baseline_policy.yaml`
+- Prune old runs with retention policy:
+```
+python tools/retention_prune.py --policy retention_policy.yaml --db runs.db
+```
+- Backup the registry periodically:
+```
+chmod +x tools/backup_registry.sh
+tools/backup_registry.sh runs.db backups
+```
+
+Performance tools:
+```
+python tools/benchmark_streaming.py --file samples/large/large_pba.xlsx --runs 3
+```
+
+CI benchmark threshold (optional):
+```
+HB_BENCH_FILE=samples/large/large_pba.xlsx HB_BENCH_MAX_S=2.0 pytest -q
+```
+
+Docker (Windows-compatible):
+```
+docker build -t harmony-bridge .
+docker run --rm -it -v "${PWD}:/app" harmony-bridge python hb/cli.py --help
+```
+
+Docker quickstart (full run):
+```
+docker run --rm -it -v "${PWD}:/app" harmony-bridge \
+  python hb/cli.py run --source pba_excel samples/cases/no_drift_pass/current_source.csv \
+  --run-meta samples/cases/no_drift_pass/current_run_meta.json
+```
+
+docker-compose (Windows-friendly):
+```
+docker compose run --rm harmony-bridge python hb/cli.py --help
+docker compose run --rm harmony-bridge \
+  python hb/cli.py run --source pba_excel samples/cases/no_drift_pass/current_source.csv \
+  --run-meta samples/cases/no_drift_pass/current_run_meta.json
 ```
 
 Tests:

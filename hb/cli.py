@@ -1,6 +1,7 @@
 import argparse
 import hashlib
 import os
+import subprocess
 import sys
 import uuid
 
@@ -20,7 +21,9 @@ from hb.registry import (
     list_runs,
 )
 from hb.registry_utils import build_alias_index
+from hb.audit import append_audit_log, write_artifact_manifest
 from hb.report import write_report, write_pdf
+from hb.security import load_key, sign_file, verify_signature, encrypt_file
 
 
 def load_metric_registry(path):
@@ -162,11 +165,49 @@ def analyze(args):
         _, error = write_pdf(html_path, pdf_path)
         if error:
             print(f"pdf export warning: {error}")
+    else:
+        pdf_path = None
 
     baseline_line = f"baseline: {baseline_run_id or 'none'} ({baseline_reason})"
     print(baseline_line)
     if baseline_warning:
         print(f"baseline warning: {baseline_warning}")
+
+    manifest_path = write_artifact_manifest(
+        report_dir,
+        [
+            json_path,
+            html_path,
+            pdf_path,
+            os.path.join(report_dir, "metrics_normalized.csv"),
+            os.path.join(report_dir, "run_meta_normalized.json"),
+        ],
+    )
+    if getattr(args, "sign_key", None):
+        key_bytes = load_key(args.sign_key)
+        sig = sign_file(manifest_path, key_bytes)
+        with open(manifest_path + ".sig", "w") as f:
+            f.write(sig + "\n")
+    if getattr(args, "encrypt_key", None):
+        key_bytes = load_key(args.encrypt_key)
+        for path in [json_path, html_path, pdf_path, manifest_path]:
+            if path and os.path.exists(path):
+                out_path, error = encrypt_file(path, key_bytes)
+                if error:
+                    print(f"encrypt warning: {error}")
+                else:
+                    print(f"encrypted: {out_path}")
+    append_audit_log(
+        report_dir,
+        run_meta["run_id"],
+        "analyze",
+        {
+            "status": status,
+            "baseline_run_id": baseline_run_id,
+            "baseline_reason": baseline_reason,
+            "artifact_manifest": os.path.abspath(manifest_path),
+        },
+    )
 
     upsert_run(
         conn,
@@ -231,6 +272,21 @@ def runs_list(args):
         print(" | ".join(str(value) for value in row))
 
 
+def verify_report(args):
+    manifest_path = os.path.join(args.report_dir, "artifact_manifest.json")
+    sig_path = manifest_path + ".sig"
+    if not os.path.exists(manifest_path) or not os.path.exists(sig_path):
+        raise HBError("artifact manifest or signature missing", EXIT_CONFIG)
+    key_bytes = load_key(args.sign_key)
+    with open(sig_path, "r") as f:
+        expected = f.read().strip()
+    ok = verify_signature(manifest_path, key_bytes, expected)
+    if ok:
+        print("signature OK")
+        return
+    raise HBError("signature verification failed", EXIT_CONFIG)
+
+
 def _read_metrics_csv(path):
     import csv
 
@@ -255,10 +311,10 @@ def _metrics_to_rows(metrics):
 
 def main():
     parser = argparse.ArgumentParser(description="Harmony Bridge CLI")
-    parser.add_argument("--metric-registry", default="metric_registry.yaml")
-    parser.add_argument("--baseline-policy", default="baseline_policy.yaml")
-    parser.add_argument("--db", default="runs.db")
-    parser.add_argument("--reports", default=os.path.join("mvp", "reports"))
+    parser.add_argument("--metric-registry", default=os.environ.get("HB_METRIC_REGISTRY", "metric_registry.yaml"))
+    parser.add_argument("--baseline-policy", default=os.environ.get("HB_BASELINE_POLICY", "baseline_policy.yaml"))
+    parser.add_argument("--db", default=os.environ.get("HB_DB_PATH", "runs.db"))
+    parser.add_argument("--reports", default=os.environ.get("HB_REPORTS_DIR", os.path.join("mvp", "reports")))
     parser.add_argument("--top", type=int, default=5)
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -278,6 +334,8 @@ def main():
     analyze_parser.add_argument("--reports", default=None)
     analyze_parser.add_argument("--top", type=int, default=None)
     analyze_parser.add_argument("--pdf", action="store_true")
+    analyze_parser.add_argument("--encrypt-key", default=None)
+    analyze_parser.add_argument("--sign-key", default=None)
 
     run_parser = subparsers.add_parser("run", help="ingest + analyze")
     run_parser.add_argument("--source", default="pba_excel")
@@ -291,6 +349,8 @@ def main():
     run_parser.add_argument("--reports", default=None)
     run_parser.add_argument("--top", type=int, default=None)
     run_parser.add_argument("--pdf", action="store_true")
+    run_parser.add_argument("--encrypt-key", default=None)
+    run_parser.add_argument("--sign-key", default=None)
 
     baseline_parser = subparsers.add_parser("baseline", help="baseline governance")
     baseline_sub = baseline_parser.add_subparsers(dest="baseline_cmd", required=True)
@@ -308,6 +368,21 @@ def main():
     runs_list_cmd = runs_sub.add_parser("list", help="list recent runs")
     runs_list_cmd.add_argument("--limit", type=int, default=20)
     runs_list_cmd.add_argument("--db", default=None)
+
+    verify_parser = subparsers.add_parser("verify", help="verify report signature")
+    verify_parser.add_argument("--report-dir", required=True)
+    verify_parser.add_argument("--sign-key", required=True)
+
+    db_parser = subparsers.add_parser("db", help="database utilities")
+    db_sub = db_parser.add_subparsers(dest="db_cmd", required=True)
+    db_encrypt = db_sub.add_parser("encrypt", help="encrypt runs.db with sqlcipher")
+    db_encrypt.add_argument("--input", default="runs.db")
+    db_encrypt.add_argument("--output", default="runs_encrypted.db")
+    db_encrypt.add_argument("--key", required=True)
+    db_decrypt = db_sub.add_parser("decrypt", help="decrypt runs.db with sqlcipher")
+    db_decrypt.add_argument("--input", default="runs_encrypted.db")
+    db_decrypt.add_argument("--output", default="runs.db")
+    db_decrypt.add_argument("--key", required=True)
 
     args = parser.parse_args()
 
@@ -327,6 +402,10 @@ def main():
                 args.top = parser.get_default("top")
             if args.pdf is None:
                 args.pdf = False
+            if args.encrypt_key is None:
+                args.encrypt_key = None
+            if args.sign_key is None:
+                args.sign_key = None
             analyze(args)
         elif args.command == "run":
             if args.metric_registry is None:
@@ -341,6 +420,10 @@ def main():
                 args.top = parser.get_default("top")
             if args.pdf is None:
                 args.pdf = False
+            if args.encrypt_key is None:
+                args.encrypt_key = None
+            if args.sign_key is None:
+                args.sign_key = None
             run(args)
         elif args.command == "baseline":
             if args.metric_registry is None:
@@ -356,6 +439,16 @@ def main():
                 args.db = parser.get_default("db")
             if args.runs_cmd == "list":
                 runs_list(args)
+        elif args.command == "verify":
+            verify_report(args)
+        elif args.command == "db":
+            script_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tools"))
+            if args.db_cmd == "encrypt":
+                script = os.path.join(script_dir, "sqlcipher_encrypt_db.sh")
+                subprocess.run(["sh", script, args.input, args.output, args.key], check=True)
+            elif args.db_cmd == "decrypt":
+                script = os.path.join(script_dir, "sqlcipher_decrypt_db.sh")
+                subprocess.run(["sh", script, args.input, args.output, args.key], check=True)
     except HBError as exc:
         print(f"error: {exc}", file=sys.stderr)
         sys.exit(exc.code)

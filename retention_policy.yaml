@@ -1,0 +1,4 @@
+retention:
+  keep_latest: 200
+  max_age_days: 90
+  reports_dir: mvp/reports

@@ -1,0 +1,13 @@
+version: "3.9"
+services:
+  harmony-bridge:
+    build: .
+    volumes:
+      - ./:/app
+    environment:
+      HB_DB_PATH: /app/runs.db
+      HB_REPORTS_DIR: /app/mvp/reports
+      HB_METRIC_REGISTRY: /app/metric_registry.yaml
+      HB_BASELINE_POLICY: /app/baseline_policy.yaml
+      PYTHONPATH: /app
+    command: ["python", "hb/cli.py", "--help"]
