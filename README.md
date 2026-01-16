@@ -119,8 +119,13 @@ bin/hb ingest --source pba_excel <path-to-file> --run-meta <run_meta.json> --out
 bin/hb analyze --run runs/<run_id>/ --baseline-policy baseline_policy.yaml
 bin/hb run --source pba_excel <path-to-file> --run-meta <run_meta.json>
 bin/hb baseline set <run_id> --tag golden
+bin/hb baseline request <run_id> --tag golden --requested-by "name"
+bin/hb baseline approve <run_id> --tag golden --approved-by "name"
+bin/hb baseline approvals
+bin/hb baseline requests
 bin/hb baseline list
 bin/hb analyze --run runs/<run_id>/ --pdf
+bin/hb analyze --run runs/<run_id>/ --redaction-policy redaction_policy.yaml
 bin/hb runs list --limit 20
 bin/hb ingest --source pba_excel <path-to-file> --run-meta <run_meta.json> --stream
 ```
@@ -139,6 +144,12 @@ Artifacts:
 - If `wkhtmltopdf` is not available, a pure-Python fallback uses `fpdf2`.
 - Each report folder includes `artifact_manifest.json` and `audit_log.jsonl`.
 - Optional encryption/signing: use `--encrypt-key` and `--sign-key` with `bin/hb analyze` or `bin/hb run`.
+- Optional redaction: use `--redaction-policy redaction_policy.yaml` to redact sensitive fields in report artifacts only.
+
+Baseline governance:
+- Enable approvals in `baseline_policy.yaml` under `governance.require_approval: true`.
+- Request a baseline change with `bin/hb baseline request`.
+- Approve with `bin/hb baseline approve --approved-by "<name>"`.
 
 Streaming examples:
 ```
@@ -184,6 +195,11 @@ bin/hb analyze --run runs/<run_id>/ --sign-key keys/signing.key
 bin/hb analyze --run runs/<run_id>/ --encrypt-key keys/encryption.key
 bin/hb verify --report-dir mvp/reports/<run_id> --sign-key keys/signing.key
 python tools/generate_sbom.py --out SBOM.md
+```
+Audit integrity + rotation:
+```
+python tools/audit_integrity_check.py --reports-dir mvp/reports
+python tools/audit_rotate.py --reports-dir mvp/reports --archive-dir logs/audit --max-bytes 5242880
 ```
 
 SQLCipher (option 2) for encrypted runs.db:
@@ -249,6 +265,11 @@ docker compose run --rm harmony-bridge \
   python hb/cli.py run --source pba_excel samples/cases/no_drift_pass/current_source.csv \
   --run-meta samples/cases/no_drift_pass/current_run_meta.json
 ```
+
+DoD lab offline + secure install:
+- `docs/OFFLINE_INSTALL.md`
+- `docs/SECURE_INSTALL.md`
+- `docs/RUNBOOK.md`
 
 Tests:
 ```

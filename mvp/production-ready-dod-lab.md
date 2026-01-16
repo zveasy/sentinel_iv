@@ -22,3 +22,10 @@ Deliverables:
 - Offline install bundle + signed artifacts.
 - Audit trail and provenance report outputs.
 - Lab deployment runbook and secure config management.
+
+Current status:
+- Offline install instructions in `docs/OFFLINE_INSTALL.md`.
+- Secure install checklist in `docs/SECURE_INSTALL.md`.
+- Runbook in `docs/RUNBOOK.md`.
+- Artifact manifests, audit logs, and signatures available.
+- SQLCipher tooling for encrypted registry.

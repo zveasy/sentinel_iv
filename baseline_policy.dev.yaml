@@ -4,6 +4,6 @@ baseline_policy:
   warn_on_mismatch: true
   tag:
   governance:
-    require_approval: true
+    require_approval: false
     approvals_required: 1
     approvers: []

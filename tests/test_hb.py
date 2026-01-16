@@ -7,6 +7,7 @@ import pytest
 
 from hb import cli
 from hb.adapters import pba_excel_adapter
+from hb import registry
 
 
 def _case_dir(case_name):
@@ -59,6 +60,7 @@ def test_cases(tmp_path, case_name):
         db=db_path,
         reports=reports_dir,
         top=5,
+        redaction_policy=None,
     )
     cli.analyze(analyze_args)
 
@@ -111,3 +113,78 @@ def test_streaming_benchmark_threshold():
     pba_excel_adapter.parse_stream(bench_file)
     elapsed = time.time() - start
     assert elapsed <= max_seconds, f"streaming took {elapsed:.3f}s, max {max_seconds}s"
+
+
+def test_baseline_request_approve_flow(tmp_path):
+    case_dir = _case_dir("no_drift_pass")
+    baseline_source = os.path.join(case_dir, "baseline_source.csv")
+    baseline_meta = os.path.join(case_dir, "baseline_run_meta.json")
+
+    db_path = os.path.join(tmp_path, "runs.db")
+    reports_dir = os.path.join(tmp_path, "reports")
+    runs_dir = os.path.join(tmp_path, "runs")
+    metric_registry = os.path.join(os.path.dirname(__file__), "..", "metric_registry.yaml")
+
+    ingest_args = Namespace(
+        source="pba_excel",
+        path=baseline_source,
+        run_meta=baseline_meta,
+        out=os.path.join(runs_dir, "baseline"),
+        metric_registry=metric_registry,
+    )
+    baseline_run_dir = cli.ingest(ingest_args)
+
+    analyze_args = Namespace(
+        run=baseline_run_dir,
+        baseline_policy=os.path.join(os.path.dirname(__file__), "..", "baseline_policy.yaml"),
+        metric_registry=metric_registry,
+        db=db_path,
+        reports=reports_dir,
+        top=5,
+        redaction_policy=None,
+    )
+    cli.analyze(analyze_args)
+
+    with open(baseline_meta, "r") as f:
+        run_id = json.load(f)["run_id"]
+
+    policy_path = os.path.join(tmp_path, "baseline_policy.yaml")
+    with open(policy_path, "w") as f:
+        f.write(
+            "baseline_policy:\n"
+            "  strategy: last_pass\n"
+            "  fallback: latest\n"
+            "  warn_on_mismatch: true\n"
+            "  tag:\n"
+            "  governance:\n"
+            "    require_approval: true\n"
+            "    approvals_required: 1\n"
+            "    approvers: [alice]\n"
+        )
+
+    request_args = Namespace(
+        run_id=run_id,
+        tag="golden",
+        requested_by="bob",
+        reason="test request",
+        request_id=None,
+        db=db_path,
+    )
+    cli.baseline_request(request_args)
+
+    approve_args = Namespace(
+        run_id=run_id,
+        tag="golden",
+        approved_by="alice",
+        reason="approved",
+        approval_id=None,
+        request_id=None,
+        metric_registry=metric_registry,
+        db=db_path,
+        baseline_policy=policy_path,
+    )
+    cli.baseline_approve(approve_args)
+
+    conn = registry.init_db(db_path)
+    tags = registry.list_baseline_tags(conn)
+    assert any(tag == "golden" and tag_run_id == run_id for tag, tag_run_id, *_ in tags)

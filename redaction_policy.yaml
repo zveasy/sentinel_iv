@@ -1,0 +1,4 @@
+redact:
+  build.git_sha: hash
+  build.build_id: redact
+  program: truncate

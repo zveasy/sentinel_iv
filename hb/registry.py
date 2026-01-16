@@ -40,10 +40,40 @@ def init_db(path):
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS baseline_approvals (
+            approval_id TEXT PRIMARY KEY,
+            run_id TEXT,
+            tag TEXT,
+            approved_by TEXT,
+            reason TEXT,
+            approved_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS baseline_requests (
+            request_id TEXT PRIMARY KEY,
+            run_id TEXT,
+            tag TEXT,
+            requested_by TEXT,
+            reason TEXT,
+            status TEXT,
+            requested_at TEXT,
+            approved_at TEXT
+        )
+        """
+    )
     cursor = conn.execute("PRAGMA table_info(runs)")
     columns = {row[1] for row in cursor.fetchall()}
     if "registry_hash" not in columns:
         conn.execute("ALTER TABLE runs ADD COLUMN registry_hash TEXT")
+    cursor = conn.execute("PRAGMA table_info(baseline_approvals)")
+    approval_columns = {row[1] for row in cursor.fetchall()}
+    if "request_id" not in approval_columns:
+        conn.execute("ALTER TABLE baseline_approvals ADD COLUMN request_id TEXT")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS metrics (
@@ -189,6 +219,133 @@ def list_baseline_tags(conn):
         "SELECT tag, run_id, registry_hash, created_at FROM baseline_tags ORDER BY created_at DESC"
     )
     return cursor.fetchall()
+
+
+def add_baseline_approval(conn, approval_id, run_id, tag, approved_by, reason, request_id=None):
+    conn.execute(
+        """
+        INSERT INTO baseline_approvals (
+            approval_id, run_id, tag, approved_by, reason, approved_at, request_id
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            approval_id,
+            run_id,
+            tag,
+            approved_by,
+            reason,
+            datetime.now(timezone.utc).isoformat(),
+            request_id,
+        ),
+    )
+    conn.commit()
+
+
+def list_baseline_approvals(conn, limit=50):
+    cursor = conn.execute(
+        """
+        SELECT approval_id, run_id, tag, approved_by, reason, approved_at, request_id
+        FROM baseline_approvals
+        ORDER BY approved_at DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+    return cursor.fetchall()
+
+
+def add_baseline_request(conn, request_id, run_id, tag, requested_by, reason):
+    conn.execute(
+        """
+        INSERT INTO baseline_requests (
+            request_id, run_id, tag, requested_by, reason, status, requested_at, approved_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            request_id,
+            run_id,
+            tag,
+            requested_by,
+            reason,
+            "pending",
+            datetime.now(timezone.utc).isoformat(),
+            None,
+        ),
+    )
+    conn.commit()
+
+
+def list_baseline_requests(conn, limit=50):
+    cursor = conn.execute(
+        """
+        SELECT request_id, run_id, tag, requested_by, reason, status, requested_at, approved_at
+        FROM baseline_requests
+        ORDER BY requested_at DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+    return cursor.fetchall()
+
+
+def get_baseline_request(conn, request_id=None, run_id=None, tag=None):
+    if request_id:
+        cursor = conn.execute(
+            """
+            SELECT request_id, run_id, tag, requested_by, reason, status, requested_at, approved_at
+            FROM baseline_requests
+            WHERE request_id = ?
+            """,
+            (request_id,),
+        )
+        return cursor.fetchone()
+    if run_id and tag:
+        cursor = conn.execute(
+            """
+            SELECT request_id, run_id, tag, requested_by, reason, status, requested_at, approved_at
+            FROM baseline_requests
+            WHERE run_id = ? AND tag = ?
+            ORDER BY requested_at DESC
+            LIMIT 1
+            """,
+            (run_id, tag),
+        )
+        return cursor.fetchone()
+    return None
+
+
+def set_baseline_request_status(conn, request_id, status, approved_at=None):
+    _execute_with_retry(
+        conn,
+        """
+        UPDATE baseline_requests
+        SET status = ?, approved_at = ?
+        WHERE request_id = ?
+        """,
+        (status, approved_at, request_id),
+    )
+    conn.commit()
+
+
+def count_baseline_approvals(conn, request_id=None, run_id=None, tag=None):
+    if request_id:
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM baseline_approvals WHERE request_id = ?",
+            (request_id,),
+        )
+    else:
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM baseline_approvals WHERE run_id = ? AND tag = ?",
+            (run_id, tag),
+        )
+    return cursor.fetchone()[0]
+
+
+def run_exists(conn, run_id):
+    cursor = conn.execute("SELECT 1 FROM runs WHERE run_id = ? LIMIT 1", (run_id,))
+    return cursor.fetchone() is not None
 
 
 def list_runs(conn, limit=20):

@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import uuid
+from datetime import datetime, timezone
 
 import yaml
 
@@ -19,11 +20,20 @@ from hb.registry import (
     set_baseline_tag,
     list_baseline_tags,
     list_runs,
+    add_baseline_approval,
+    list_baseline_approvals,
+    add_baseline_request,
+    list_baseline_requests,
+    get_baseline_request,
+    set_baseline_request_status,
+    count_baseline_approvals,
+    run_exists,
 )
 from hb.registry_utils import build_alias_index
-from hb.audit import append_audit_log, write_artifact_manifest
+from hb.audit import append_audit_log, write_artifact_manifest, verify_artifact_manifest
 from hb.report import write_report, write_pdf
 from hb.security import load_key, sign_file, verify_signature, encrypt_file
+from hb.redaction import apply_redaction
 
 
 def load_metric_registry(path):
@@ -124,6 +134,7 @@ def analyze(args):
     registry = load_metric_registry(args.metric_registry)
     policy = load_baseline_policy(args.baseline_policy)
     registry_hash = file_hash(args.metric_registry)
+    redaction_policy = args.redaction_policy
 
     conn = init_db(args.db)
     baseline_run_id, baseline_reason, baseline_warning = select_baseline(
@@ -146,8 +157,16 @@ def analyze(args):
         metrics_current, baseline_metrics, registry
     )
 
+    report_meta = run_meta
+    if redaction_policy:
+        import copy
+
+        report_meta = apply_redaction(
+            policy_path=redaction_policy, run_meta=copy.deepcopy(run_meta)
+        )
+
     report_payload = {
-        "run_id": run_meta["run_id"],
+        "run_id": report_meta["run_id"],
         "status": status,
         "baseline_run_id": baseline_run_id,
         "baseline_reason": baseline_reason,
@@ -158,7 +177,7 @@ def analyze(args):
         "fail_metrics": fail_metrics,
     }
 
-    report_dir = os.path.join(args.reports, run_meta["run_id"])
+    report_dir = os.path.join(args.reports, report_meta["run_id"])
     json_path, html_path = write_report(report_dir, report_payload)
     if getattr(args, "pdf", False):
         pdf_path = os.path.join(report_dir, "drift_report.pdf")
@@ -199,7 +218,7 @@ def analyze(args):
                     print(f"encrypted: {out_path}")
     append_audit_log(
         report_dir,
-        run_meta["run_id"],
+        report_meta["run_id"],
         "analyze",
         {
             "status": status,
@@ -218,7 +237,7 @@ def analyze(args):
     )
     replace_metrics(conn, run_meta["run_id"], _metrics_to_rows(metrics_current))
 
-    write_json(os.path.join(report_dir, "run_meta_normalized.json"), run_meta)
+    write_json(os.path.join(report_dir, "run_meta_normalized.json"), report_meta)
     write_metrics_csv(os.path.join(report_dir, "metrics_normalized.csv"), _metrics_to_rows(metrics_current))
 
     print(f"report output: {report_dir}")
@@ -235,6 +254,9 @@ def run(args):
         reports=args.reports,
         top=args.top,
         pdf=args.pdf,
+        encrypt_key=args.encrypt_key,
+        sign_key=args.sign_key,
+        redaction_policy=args.redaction_policy,
     )
     report_dir = analyze(analyze_args)
     print(f"run output: {report_dir}")
@@ -242,7 +264,16 @@ def run(args):
 
 
 def baseline_set(args):
+    policy = load_baseline_policy(args.baseline_policy)
+    governance = policy.get("governance", {})
+    if governance.get("require_approval") and not args.force:
+        raise HBError(
+            "baseline changes require approval; use baseline request/approve or pass --force",
+            EXIT_CONFIG,
+        )
     conn = init_db(args.db)
+    if not run_exists(conn, args.run_id):
+        raise HBError(f"run_id not found: {args.run_id}", EXIT_CONFIG)
     registry_hash = file_hash(args.metric_registry)
     set_baseline_tag(conn, args.tag, args.run_id, registry_hash)
     print(f"baseline tag set: {args.tag} -> {args.run_id}")
@@ -256,6 +287,88 @@ def baseline_list(args):
         return
     print("tag | run_id | registry_hash | created_at")
     print("----+--------+---------------+-----------")
+    for row in rows:
+        print(" | ".join(str(value) for value in row))
+
+
+def baseline_approve(args):
+    policy = load_baseline_policy(args.baseline_policy)
+    governance = policy.get("governance", {})
+    allowed_approvers = governance.get("approvers") or []
+    approvals_required = int(governance.get("approvals_required", 1))
+    conn = init_db(args.db)
+    if not run_exists(conn, args.run_id):
+        raise HBError(f"run_id not found: {args.run_id}", EXIT_CONFIG)
+    if allowed_approvers and args.approved_by not in allowed_approvers:
+        raise HBError(f"approver not authorized: {args.approved_by}", EXIT_CONFIG)
+
+    request = get_baseline_request(conn, request_id=args.request_id, run_id=args.run_id, tag=args.tag)
+    if governance.get("require_approval") and not request:
+        raise HBError("no pending baseline request found", EXIT_CONFIG)
+
+    approval_id = args.approval_id or str(uuid.uuid4())
+    add_baseline_approval(
+        conn,
+        approval_id,
+        args.run_id,
+        args.tag,
+        args.approved_by,
+        args.reason or "",
+        request_id=request[0] if request else None,
+    )
+    approval_count = count_baseline_approvals(
+        conn, request_id=request[0] if request else None, run_id=args.run_id, tag=args.tag
+    )
+    if approval_count >= approvals_required or not governance.get("require_approval"):
+        set_baseline_tag(conn, args.tag, args.run_id, file_hash(args.metric_registry))
+        if request:
+            set_baseline_request_status(
+                conn, request[0], "approved", approved_at=datetime.now(timezone.utc).isoformat()
+            )
+        print(f"baseline approved: {args.tag} -> {args.run_id} by {args.approved_by}")
+    else:
+        print(
+            "approval recorded: "
+            f"{approval_count}/{approvals_required} required for {args.tag} -> {args.run_id}"
+        )
+
+
+def baseline_approvals(args):
+    conn = init_db(args.db)
+    rows = list_baseline_approvals(conn, limit=args.limit)
+    if not rows:
+        print("no baseline approvals found")
+        return
+    print("approval_id | run_id | tag | approved_by | reason | approved_at | request_id")
+    print("------------+--------+-----+-------------+--------+-----------+-----------")
+    for row in rows:
+        print(" | ".join(str(value) for value in row))
+
+
+def baseline_request(args):
+    conn = init_db(args.db)
+    if not run_exists(conn, args.run_id):
+        raise HBError(f"run_id not found: {args.run_id}", EXIT_CONFIG)
+    request_id = args.request_id or str(uuid.uuid4())
+    add_baseline_request(
+        conn,
+        request_id,
+        args.run_id,
+        args.tag,
+        args.requested_by,
+        args.reason or "",
+    )
+    print(f"baseline request created: {request_id} for {args.tag} -> {args.run_id}")
+
+
+def baseline_requests(args):
+    conn = init_db(args.db)
+    rows = list_baseline_requests(conn, limit=args.limit)
+    if not rows:
+        print("no baseline requests found")
+        return
+    print("request_id | run_id | tag | requested_by | reason | status | requested_at | approved_at")
+    print("----------+--------+-----+--------------+--------+--------+--------------+-----------")
     for row in rows:
         print(" | ".join(str(value) for value in row))
 
@@ -275,16 +388,24 @@ def runs_list(args):
 def verify_report(args):
     manifest_path = os.path.join(args.report_dir, "artifact_manifest.json")
     sig_path = manifest_path + ".sig"
-    if not os.path.exists(manifest_path) or not os.path.exists(sig_path):
-        raise HBError("artifact manifest or signature missing", EXIT_CONFIG)
-    key_bytes = load_key(args.sign_key)
-    with open(sig_path, "r") as f:
-        expected = f.read().strip()
-    ok = verify_signature(manifest_path, key_bytes, expected)
-    if ok:
-        print("signature OK")
-        return
-    raise HBError("signature verification failed", EXIT_CONFIG)
+    if not os.path.exists(manifest_path):
+        raise HBError("artifact manifest missing", EXIT_CONFIG)
+    issues = verify_artifact_manifest(manifest_path)
+    if issues:
+        raise HBError(f"artifact manifest verification failed: {issues[0]}", EXIT_CONFIG)
+    print("artifact manifest OK")
+
+    if args.sign_key:
+        if not os.path.exists(sig_path):
+            raise HBError("signature missing", EXIT_CONFIG)
+        key_bytes = load_key(args.sign_key)
+        with open(sig_path, "r") as f:
+            expected = f.read().strip()
+        ok = verify_signature(manifest_path, key_bytes, expected)
+        if ok:
+            print("signature OK")
+            return
+        raise HBError("signature verification failed", EXIT_CONFIG)
 
 
 def _read_metrics_csv(path):
@@ -336,6 +457,7 @@ def main():
     analyze_parser.add_argument("--pdf", action="store_true")
     analyze_parser.add_argument("--encrypt-key", default=None)
     analyze_parser.add_argument("--sign-key", default=None)
+    analyze_parser.add_argument("--redaction-policy", default=None)
 
     run_parser = subparsers.add_parser("run", help="ingest + analyze")
     run_parser.add_argument("--source", default="pba_excel")
@@ -351,17 +473,43 @@ def main():
     run_parser.add_argument("--pdf", action="store_true")
     run_parser.add_argument("--encrypt-key", default=None)
     run_parser.add_argument("--sign-key", default=None)
+    run_parser.add_argument("--redaction-policy", default=None)
 
     baseline_parser = subparsers.add_parser("baseline", help="baseline governance")
     baseline_sub = baseline_parser.add_subparsers(dest="baseline_cmd", required=True)
     baseline_set_cmd = baseline_sub.add_parser("set", help="set baseline tag")
     baseline_set_cmd.add_argument("run_id")
     baseline_set_cmd.add_argument("--tag", default="golden")
+    baseline_set_cmd.add_argument("--force", action="store_true")
+    baseline_set_cmd.add_argument("--baseline-policy", default=None)
     baseline_list_cmd = baseline_sub.add_parser("list", help="list baseline tags")
     baseline_set_cmd.add_argument("--metric-registry", default=None)
     baseline_set_cmd.add_argument("--db", default=None)
     baseline_list_cmd.add_argument("--db", default=None)
     baseline_list_cmd.add_argument("--metric-registry", default=None)
+    baseline_request_cmd = baseline_sub.add_parser("request", help="request baseline change")
+    baseline_request_cmd.add_argument("run_id")
+    baseline_request_cmd.add_argument("--tag", default="golden")
+    baseline_request_cmd.add_argument("--requested-by", required=True)
+    baseline_request_cmd.add_argument("--reason", default="")
+    baseline_request_cmd.add_argument("--request-id", default=None)
+    baseline_request_cmd.add_argument("--db", default=None)
+    baseline_approve_cmd = baseline_sub.add_parser("approve", help="approve baseline change")
+    baseline_approve_cmd.add_argument("run_id")
+    baseline_approve_cmd.add_argument("--tag", default="golden")
+    baseline_approve_cmd.add_argument("--approved-by", required=True)
+    baseline_approve_cmd.add_argument("--reason", default="")
+    baseline_approve_cmd.add_argument("--approval-id", default=None)
+    baseline_approve_cmd.add_argument("--request-id", default=None)
+    baseline_approve_cmd.add_argument("--baseline-policy", default=None)
+    baseline_approve_cmd.add_argument("--metric-registry", default=None)
+    baseline_approve_cmd.add_argument("--db", default=None)
+    baseline_approvals_cmd = baseline_sub.add_parser("approvals", help="list baseline approvals")
+    baseline_approvals_cmd.add_argument("--limit", type=int, default=50)
+    baseline_approvals_cmd.add_argument("--db", default=None)
+    baseline_requests_cmd = baseline_sub.add_parser("requests", help="list baseline requests")
+    baseline_requests_cmd.add_argument("--limit", type=int, default=50)
+    baseline_requests_cmd.add_argument("--db", default=None)
 
     runs_parser = subparsers.add_parser("runs", help="run registry")
     runs_sub = runs_parser.add_subparsers(dest="runs_cmd", required=True)
@@ -371,7 +519,7 @@ def main():
 
     verify_parser = subparsers.add_parser("verify", help="verify report signature")
     verify_parser.add_argument("--report-dir", required=True)
-    verify_parser.add_argument("--sign-key", required=True)
+    verify_parser.add_argument("--sign-key", required=False)
 
     db_parser = subparsers.add_parser("db", help="database utilities")
     db_sub = db_parser.add_subparsers(dest="db_cmd", required=True)
@@ -424,16 +572,28 @@ def main():
                 args.encrypt_key = None
             if args.sign_key is None:
                 args.sign_key = None
+            if args.redaction_policy is None:
+                args.redaction_policy = None
             run(args)
         elif args.command == "baseline":
             if args.metric_registry is None:
                 args.metric_registry = parser.get_default("metric_registry")
             if args.db is None:
                 args.db = parser.get_default("db")
+            if getattr(args, "baseline_policy", None) is None:
+                args.baseline_policy = parser.get_default("baseline_policy")
             if args.baseline_cmd == "set":
                 baseline_set(args)
             elif args.baseline_cmd == "list":
                 baseline_list(args)
+            elif args.baseline_cmd == "request":
+                baseline_request(args)
+            elif args.baseline_cmd == "approve":
+                baseline_approve(args)
+            elif args.baseline_cmd == "approvals":
+                baseline_approvals(args)
+            elif args.baseline_cmd == "requests":
+                baseline_requests(args)
         elif args.command == "runs":
             if args.db is None:
                 args.db = parser.get_default("db")

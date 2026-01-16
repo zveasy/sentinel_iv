@@ -1,0 +1,9 @@
+# Run weekly on Sunday at 3:30 AM, write logs to logs/ and capture stdout/stderr.
+30 3 * * 0 ROOT_DIR=/Users/zakariyaveasy/Desktop/ZKJ/sentinel_iv \
+  REPORTS_DIR=/Users/zakariyaveasy/Desktop/ZKJ/sentinel_iv/mvp/reports \
+  DB_PATH=/Users/zakariyaveasy/Desktop/ZKJ/sentinel_iv/runs.db \
+  DISK_MAX_MB=5120 \
+  BASELINE_POLICY=/Users/zakariyaveasy/Desktop/ZKJ/sentinel_iv/baseline_policy.yaml \
+  ALERT_EMAIL=you@example.com \
+  /Users/zakariyaveasy/Desktop/ZKJ/sentinel_iv/tools/ops_healthcheck.sh \
+  >> /Users/zakariyaveasy/Desktop/ZKJ/sentinel_iv/logs/ops_healthcheck_cron.log 2>&1
