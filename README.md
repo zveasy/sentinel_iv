@@ -138,6 +138,25 @@ Artifacts:
 - Optional PDF export uses `wkhtmltopdf` if installed (`drift_report.pdf`).
 - If `wkhtmltopdf` is not available, a pure-Python fallback uses `fpdf2`.
 
+Streaming examples:
+```
+bin/hb ingest --source pba_excel samples/cases/no_drift_pass/current_source.csv --run-meta samples/cases/no_drift_pass/current_run_meta.json --out runs/no_drift_pass_current --stream
+bin/hb run --source pba_excel samples/cases/no_drift_pass/current_source.csv --run-meta samples/cases/no_drift_pass/current_run_meta.json --stream
+```
+
+Synthetic demo:
+```
+python tools/make_synthetic_runs.py --baseline-count 3 --drift-count 3 --out samples/synthetic
+chmod +x tools/run_synthetic_demo.sh
+tools/run_synthetic_demo.sh
+```
+
+Large XLSX stress test:
+```
+python tools/make_large_xlsx.py --rows 50000 --out samples/large/large_pba.xlsx
+bin/hb ingest --source pba_excel samples/large/large_pba.xlsx --run-meta samples/cases/no_drift_pass/current_run_meta.json --stream
+```
+
 Tests:
 ```
 pytest -q
