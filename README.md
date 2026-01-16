@@ -157,6 +157,25 @@ python tools/make_large_xlsx.py --rows 50000 --out samples/large/large_pba.xlsx
 bin/hb ingest --source pba_excel samples/large/large_pba.xlsx --run-meta samples/cases/no_drift_pass/current_run_meta.json --stream
 ```
 
+Demo checklist:
+1) Generate synthetic runs:
+```
+python tools/make_synthetic_runs.py --baseline-count 3 --drift-count 3 --out samples/synthetic
+```
+2) Run baseline + drift demo:
+```
+chmod +x tools/run_synthetic_demo.sh
+tools/run_synthetic_demo.sh
+```
+3) Open a drift report:
+```
+open mvp/reports/<run_id>/drift_report.html
+```
+4) Confirm drift status and top metrics:
+```
+jq -r '.status, .baseline_run_id, (.top_drifts[]?.metric // empty)' mvp/reports/<run_id>/drift_report.json
+```
+
 Tests:
 ```
 pytest -q
