@@ -1,0 +1,7 @@
+Metric,Baseline,Current,Delta,Threshold,Unit,Status
+Avg Latency (ms),10.1238,10.1238,,,ms,
+Latency Max,19.8026,19.8026,,,ms,
+Resets,0,0,,,,
+Watchdog Count,0,0,,,,
+error_rate,-0.0539,-0.0539,,,,
+Deadline Misses,0,0,,,,

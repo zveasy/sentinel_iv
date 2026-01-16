@@ -1,0 +1,18 @@
+{
+  "run_id": "multi_metric_drift_current",
+  "program": "harmony",
+  "subsystem": "core",
+  "test_name": "multi_metric_drift",
+  "environment": "lab",
+  "build": {
+    "git_sha": "abc123",
+    "build_id": "build-2-c"
+  },
+  "timestamps": {
+    "start_utc": "2026-01-01T00:03:00+00:00",
+    "end_utc": "2026-01-01T00:03:30+00:00"
+  },
+  "toolchain": {
+    "source_system": "pba_excel"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "run_id": "baseline_missing_fallback_current",
+  "program": "harmony",
+  "subsystem": "core",
+  "test_name": "baseline_missing_fallback",
+  "environment": "lab",
+  "build": {
+    "git_sha": "abc123",
+    "build_id": "build-7-c"
+  },
+  "timestamps": {
+    "start_utc": "2026-01-01T00:08:00+00:00",
+    "end_utc": "2026-01-01T00:08:30+00:00"
+  },
+  "toolchain": {
+    "source_system": "pba_excel"
+  }
+}

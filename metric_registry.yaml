@@ -1,0 +1,53 @@
+metrics:
+  avg_latency_ms:
+    aliases:
+      - Avg Task Latency (ms)
+      - Avg Latency (ms)
+      - Avg Latency
+    drift_threshold: 1.0
+    drift_percent: 10.0
+    min_effect: 0.5
+    unit: ms
+    unit_map:
+      ms: 1
+      us: 0.001
+      s: 1000
+  max_latency_ms:
+    aliases:
+      - Max Task Latency (ms)
+      - Max Latency (ms)
+      - Max Latency
+    drift_threshold: 5.0
+    drift_percent: 15.0
+    min_effect: 1.0
+    unit: ms
+    unit_map:
+      ms: 1
+      us: 0.001
+      s: 1000
+  reset_count:
+    aliases:
+      - Reset Count
+      - Resets
+    drift_threshold: 1
+    critical: true
+    fail_threshold: 0
+  watchdog_triggers:
+    aliases:
+      - Watchdog Triggers
+      - Watchdog Count
+    drift_threshold: 1
+    critical: true
+    fail_threshold: 0
+  error_code_frequency:
+    aliases:
+      - Error Code Frequency
+      - Error Rate
+    drift_threshold: 0.05
+    drift_percent: 20.0
+    min_effect: 0.005
+  missed_deadlines:
+    aliases:
+      - Missed Deadlines
+      - Deadline Misses
+    drift_threshold: 1

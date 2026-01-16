@@ -1,0 +1,34 @@
+{
+  "run_id": "baseline_2_8cea8999",
+  "status": "PASS_WITH_DRIFT",
+  "baseline_run_id": "baseline_0_2cc50edd",
+  "baseline_reason": "last_pass",
+  "drift_metrics": [
+    {
+      "metric": "error_code_frequency",
+      "baseline": 0.1046,
+      "current": -0.1018,
+      "delta": -0.2064,
+      "percent_change": -197.32313575525814,
+      "drift_threshold": 0.05,
+      "drift_percent": 20.0,
+      "unit": "",
+      "severity": "DRIFT"
+    }
+  ],
+  "top_drifts": [
+    {
+      "metric": "error_code_frequency",
+      "baseline": 0.1046,
+      "current": -0.1018,
+      "delta": -0.2064,
+      "percent_change": -197.32313575525814,
+      "drift_threshold": 0.05,
+      "drift_percent": 20.0,
+      "unit": "",
+      "severity": "DRIFT"
+    }
+  ],
+  "warnings": [],
+  "fail_metrics": []
+}

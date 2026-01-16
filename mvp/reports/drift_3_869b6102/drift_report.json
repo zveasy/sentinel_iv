@@ -1,0 +1,58 @@
+{
+  "run_id": "drift_3_869b6102",
+  "status": "PASS_WITH_DRIFT",
+  "baseline_run_id": "baseline_0_2cc50edd",
+  "baseline_reason": "last_pass",
+  "drift_metrics": [
+    {
+      "metric": "avg_latency_ms",
+      "baseline": 10.0558,
+      "current": 12.5543,
+      "delta": 2.4985,
+      "percent_change": 24.84635732612025,
+      "drift_threshold": 1.0,
+      "drift_percent": 10.0,
+      "unit": "ms",
+      "severity": "DRIFT"
+    },
+    {
+      "metric": "error_code_frequency",
+      "baseline": 0.1046,
+      "current": -0.0832,
+      "delta": -0.1878,
+      "percent_change": -179.54110898661568,
+      "drift_threshold": 0.05,
+      "drift_percent": 20.0,
+      "unit": "",
+      "severity": "DRIFT"
+    }
+  ],
+  "top_drifts": [
+    {
+      "metric": "avg_latency_ms",
+      "baseline": 10.0558,
+      "current": 12.5543,
+      "delta": 2.4985,
+      "percent_change": 24.84635732612025,
+      "drift_threshold": 1.0,
+      "drift_percent": 10.0,
+      "unit": "ms",
+      "severity": "DRIFT"
+    },
+    {
+      "metric": "error_code_frequency",
+      "baseline": 0.1046,
+      "current": -0.0832,
+      "delta": -0.1878,
+      "percent_change": -179.54110898661568,
+      "drift_threshold": 0.05,
+      "drift_percent": 20.0,
+      "unit": "",
+      "severity": "DRIFT"
+    }
+  ],
+  "warnings": [
+    "missing baseline metric: max_latency_ms"
+  ],
+  "fail_metrics": []
+}

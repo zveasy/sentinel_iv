@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Harmony Bridge Drift Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f3f3f3; }
+    @media print {
+      body { margin: 0.5in; }
+      table { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Drift Report</h1>
+  <div>Status: PASS_WITH_DRIFT</div>
+  <div>Run ID: drift_latency_tail_0_0aff7817</div>
+  <div>Baseline Run ID: baseline_0_2cc50edd</div>
+  <h2>Drift Metrics</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Baseline</th>
+        <th>Current</th>
+        <th>Delta</th>
+        <th>Percent Change</th>
+        <th>Threshold</th>
+        <th>Percent Threshold</th>
+        <th>Unit</th>
+        <th>Severity</th>
+        <th>Why Flagged</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>avg_latency_ms</td><td>10.0558</td><td>12.6229</td><td>2.5671</td><td>25.52855068716562</td><td>1.0</td><td>10.0</td><td>ms</td><td>DRIFT</td><td>delta 2.5671ms; threshold 1.0ms; percent 25.53% > 10.0%; min_effect 0.5ms</td></tr>
+<tr><td>error_code_frequency</td><td>0.1046</td><td>-0.0386</td><td>-0.1432</td><td>-136.90248565965584</td><td>0.05</td><td>20.0</td><td></td><td>DRIFT</td><td>delta -0.1432; threshold 0.05; percent -136.9% > 20.0%; min_effect 0.005</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>

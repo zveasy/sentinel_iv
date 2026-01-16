@@ -98,6 +98,68 @@ Additional advisors and contracted contributors will include:
 - QA / Mission Assurance professionals
 - Secure systems software consultants
 
+## Harmony Bridge (Software-Only MVP)
+
+Harmony Bridge is a system-agnostic drift detection layer. It does not run tests; it consumes exported artifacts (Excel/CSV/JSON logs) and compares current runs to baselines.
+
+Quickstart:
+```
+python -m venv .venv
+source .venv/bin/activate
+pip install -r hb/requirements.txt -r hb/requirements-dev.txt
+
+chmod +x bin/hb
+bin/hb ingest --source pba_excel samples/cases/no_drift_pass/current_source.csv --run-meta samples/cases/no_drift_pass/current_run_meta.json --out runs/no_drift_pass_current
+bin/hb analyze --run runs/no_drift_pass_current
+```
+
+Commands:
+```
+bin/hb ingest --source pba_excel <path-to-file> --run-meta <run_meta.json> --out runs/<run_id>/
+bin/hb analyze --run runs/<run_id>/ --baseline-policy baseline_policy.yaml
+bin/hb run --source pba_excel <path-to-file> --run-meta <run_meta.json>
+bin/hb baseline set <run_id> --tag golden
+bin/hb baseline list
+bin/hb analyze --run runs/<run_id>/ --pdf
+bin/hb runs list --limit 20
+bin/hb ingest --source pba_excel <path-to-file> --run-meta <run_meta.json> --stream
+```
+
+Exit codes:
+- `0` success
+- `1` unknown error
+- `2` parse/ingest error
+- `3` config error
+- `4` registry error
+
+Artifacts:
+- `run_contract.md` describes `run_meta.json`, `metrics.csv`, and optional `events.jsonl`.
+- Reports are written to `mvp/reports/<run_id>/` as `drift_report.json` and `drift_report.html`.
+- Optional PDF export uses `wkhtmltopdf` if installed (`drift_report.pdf`).
+- If `wkhtmltopdf` is not available, a pure-Python fallback uses `fpdf2`.
+
+Tests:
+```
+pytest -q
+```
+
+## MVP Acceptance Criteria
+
+Done means:
+- One-command flow works: `bin/hb run --source pba_excel samples/.../input.csv`
+- Creates `mvp/reports/<run_id>/drift_report.html` and `mvp/reports/<run_id>/drift_report.json`
+- Writes `runs.db` and stores run + metrics
+- Baseline is automatically selected (last PASS for same program/subsystem/test_name)
+- Baseline governance is available via `bin/hb baseline set/list`
+- Alias mapping works when headers change
+- Missing metrics do not crash the run
+- All 8 golden tests pass
+
+## Adapter Samples
+
+- Unit-sheet Excel example: `samples/pba_unit_sheet_example.xlsx`
+- Large XLSX generator: `python tools/make_large_xlsx.py --rows 50000 --out samples/large/large_pba.xlsx`
+
 ## Software-Only MVP Direction
 
 Yes, a software-only MVP is the right move. It proves the core value without new hardware by delivering an observer + reducer + baseline comparer + report generator. Hardware becomes Phase II polish, not Phase I proof.

@@ -1,0 +1,6 @@
+{
+  "status": "FAIL",
+  "fail_metrics": [
+    "reset_count"
+  ]
+}

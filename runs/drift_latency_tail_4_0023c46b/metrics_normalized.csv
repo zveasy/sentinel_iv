@@ -1,0 +1,7 @@
+metric,value,unit,tags
+avg_latency_ms,12.5592,ms,
+max_latency_ms,26.0437,ms,
+reset_count,0.0,,
+watchdog_triggers,0.0,,
+error_code_frequency,-0.1246,,
+missed_deadlines,0.0,,

@@ -1,0 +1,18 @@
+{
+  "run_id": "header_alias_change_baseline",
+  "program": "harmony",
+  "subsystem": "core",
+  "test_name": "header_alias_change",
+  "environment": "lab",
+  "build": {
+    "git_sha": "abc123",
+    "build_id": "build-5-b"
+  },
+  "timestamps": {
+    "start_utc": "2026-01-01T00:05:00+00:00",
+    "end_utc": "2026-01-01T00:05:30+00:00"
+  },
+  "toolchain": {
+    "source_system": "pba_excel"
+  }
+}

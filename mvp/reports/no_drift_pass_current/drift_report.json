@@ -1,0 +1,11 @@
+{
+  "run_id": "no_drift_pass_current",
+  "status": "PASS",
+  "baseline_run_id": "no_drift_pass_current",
+  "baseline_reason": "last_pass",
+  "baseline_warning": null,
+  "drift_metrics": [],
+  "top_drifts": [],
+  "warnings": [],
+  "fail_metrics": []
+}

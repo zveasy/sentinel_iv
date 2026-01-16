@@ -1,0 +1,7 @@
+Metric,Baseline,Current,Delta,Threshold,Unit,Status
+Avg Task Latency (ms),10,10,,,ms,
+Max Task Latency (ms),20,20,,,ms,
+Reset Count,0,0,,,,
+Watchdog Triggers,0,0,,,,
+Error Code Frequency,0.01,0.01,,,,
+Missed Deadlines,0,0,,,,

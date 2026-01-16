@@ -1,0 +1,6 @@
+{
+  "status": "PASS",
+  "warnings_contains": [
+    "missing current metric: error_code_frequency"
+  ]
+}

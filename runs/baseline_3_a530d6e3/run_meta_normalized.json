@@ -1,0 +1,18 @@
+{
+  "run_id": "baseline_3_a530d6e3",
+  "program": "harmony",
+  "subsystem": "core",
+  "test_name": "synthetic_demo",
+  "environment": "lab",
+  "build": {
+    "git_sha": "synthetic",
+    "build_id": "baseline_3_a530d6e3"
+  },
+  "timestamps": {
+    "start_utc": "2026-01-16T03:34:01.020303+00:00",
+    "end_utc": "2026-01-16T03:34:31.020303+00:00"
+  },
+  "toolchain": {
+    "source_system": "pba_excel"
+  }
+}

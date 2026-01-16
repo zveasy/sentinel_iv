@@ -1,0 +1,5 @@
+baseline_policy:
+  strategy: last_pass
+  fallback: latest
+  warn_on_mismatch: true
+  tag:

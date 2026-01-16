@@ -1,0 +1,18 @@
+{
+  "run_id": "drift_latency_tail_0_978c6f25",
+  "program": "harmony",
+  "subsystem": "core",
+  "test_name": "synthetic_demo",
+  "environment": "lab",
+  "build": {
+    "git_sha": "synthetic",
+    "build_id": "drift_latency_tail_0_978c6f25"
+  },
+  "timestamps": {
+    "start_utc": "2026-01-16T15:58:39.787652+00:00",
+    "end_utc": "2026-01-16T15:59:09.787652+00:00"
+  },
+  "toolchain": {
+    "source_system": "pba_excel"
+  }
+}

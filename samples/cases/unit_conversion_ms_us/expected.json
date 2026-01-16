@@ -1,0 +1,6 @@
+{
+  "status": "PASS_WITH_DRIFT",
+  "drift_metrics": [
+    "avg_latency_ms"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "run_id": "drift_reset_event_2_f0e5f57c",
+  "program": "harmony",
+  "subsystem": "core",
+  "test_name": "synthetic_demo",
+  "environment": "lab",
+  "build": {
+    "git_sha": "synthetic",
+    "build_id": "drift_reset_event_2_f0e5f57c"
+  },
+  "timestamps": {
+    "start_utc": "2026-01-16T05:11:26.295336+00:00",
+    "end_utc": "2026-01-16T05:11:56.295336+00:00"
+  },
+  "toolchain": {
+    "source_system": "pba_excel"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "run_id": "drift_3_869b6102",
+  "program": "harmony",
+  "subsystem": "core",
+  "test_name": "synthetic_demo",
+  "environment": "lab",
+  "build": {
+    "git_sha": "synthetic",
+    "build_id": "drift_3_869b6102"
+  },
+  "timestamps": {
+    "start_utc": "2026-01-16T05:02:36.357376+00:00",
+    "end_utc": "2026-01-16T05:03:06.357376+00:00"
+  },
+  "toolchain": {
+    "source_system": "pba_excel"
+  }
+}

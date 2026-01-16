@@ -1,0 +1,12 @@
+{
+  "run_id": "baseline_0_7ccc05dc",
+  "status": "PASS",
+  "baseline_run_id": "baseline_0_2cc50edd",
+  "baseline_reason": "last_pass",
+  "drift_metrics": [],
+  "top_drifts": [],
+  "warnings": [
+    "missing baseline metric: max_latency_ms"
+  ],
+  "fail_metrics": []
+}
