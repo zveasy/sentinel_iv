@@ -1,0 +1,3 @@
+warn_threshold: 3.0
+fail_threshold: 6.0
+fail_persistence_cycles: 10

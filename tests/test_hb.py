@@ -31,6 +31,7 @@ def _load_expected(case_name):
         "header_alias_change",
         "unit_conversion_ms_us",
         "baseline_missing_fallback",
+        "distribution_drift",
     ],
 )
 def test_cases(tmp_path, case_name):
@@ -93,6 +94,8 @@ def test_cases(tmp_path, case_name):
             assert warning in report.get("warnings", [])
     if "baseline_reason" in expected:
         assert report.get("baseline_reason") == expected["baseline_reason"]
+    if "distribution_drifts_count" in expected:
+        assert len(report.get("distribution_drifts", [])) == expected["distribution_drifts_count"]
 
 
 def test_streaming_excel_unit_sheet():

@@ -18,6 +18,11 @@ Optional:
   "subsystem": "fire_control",
   "test_name": "nightly_regression_suite",
   "environment": "hil|simics|lab",
+  "operating_mode": "nominal|stress|thermal",
+  "scenario_id": "scenario-42",
+  "sensor_config_id": "sensor-pack-a",
+  "input_data_version": "dataset-v3",
+  "environment_fingerprint": "hil-rack-02",
   "build": {"git_sha":"...", "build_id":"..."},
   "timestamps": {"start_utc":"...", "end_utc":"..."},
   "toolchain": {"source_system":"pba_excel"}
@@ -39,6 +44,9 @@ Rules:
 - `value` is numeric
 - `unit` optional; used for conversion
 - `tags` optional string
+  - If `tags` is JSON, it may include `"samples": [..]` for distribution drift checks.
+ 
+Context fields in `run_meta.json` are optional but used for baseline matching when present.
 
 ## events.jsonl (optional)
 

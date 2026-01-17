@@ -1,0 +1,23 @@
+{
+  "run_id": "distribution_drift_baseline",
+  "program": "harmony",
+  "subsystem": "core",
+  "test_name": "distribution_drift",
+  "environment": "lab",
+  "build": {
+    "git_sha": "abc123",
+    "build_id": "build-9-a"
+  },
+  "timestamps": {
+    "start_utc": "2026-01-02T00:07:00+00:00",
+    "end_utc": "2026-01-02T00:07:30+00:00"
+  },
+  "toolchain": {
+    "source_system": "pba_excel"
+  },
+  "operating_mode": "nominal",
+  "scenario_id": "distribution_drift",
+  "sensor_config_id": "sensor-pack-a",
+  "input_data_version": "dataset-v1",
+  "environment_fingerprint": "lab-rack-01"
+}

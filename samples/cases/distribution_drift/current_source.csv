@@ -1,0 +1,7 @@
+Metric,Baseline,Current,Delta,Threshold,Unit,Tags,Status
+avg_latency_ms,10,10,,,ms,"{""samples"":[14,15,16,15,14,15,16,15]}",
+max_latency_ms,20,20,,,ms,,
+reset_count,0,0,,,,,
+watchdog_triggers,0,0,,,,,
+error_code_frequency,0.01,0.01,,,,,
+missed_deadlines,0,0,,,,,

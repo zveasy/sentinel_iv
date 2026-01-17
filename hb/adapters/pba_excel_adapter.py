@@ -102,6 +102,8 @@ def _load_rows_xlsx_streaming(path):
             current_idx = col_map.get("current")
             value_idx = col_map.get("value")
             unit_idx = col_map.get("unit")
+            tags_idx = col_map.get("tags")
+            tags_idx = col_map.get("tags")
             if current_idx is None and value_idx is None:
                 raise ValueError("missing required column: Current or Value")
             value = None
@@ -204,6 +206,7 @@ def parse(path):
         metrics = {}
         if "metric" not in col_map:
             raise ValueError("missing required column: Metric")
+        tags_idx = col_map.get("tags")
         for row in data_rows:
             if not row:
                 continue
@@ -228,7 +231,10 @@ def parse(path):
                 unit = row[unit_idx]
             if unit is None and metric_name in unit_map:
                 unit = unit_map[metric_name]
-            metrics[metric_name] = {"value": value, "unit": unit}
+            tags = None
+            if tags_idx is not None and tags_idx < len(row):
+                tags = row[tags_idx]
+            metrics[metric_name] = {"value": value, "unit": unit, "tags": tags}
         return metrics
 
     # Fallback: treat as metric,value table
@@ -242,7 +248,7 @@ def parse(path):
         unit = None
         if metric_name in unit_map:
             unit = unit_map[metric_name]
-        metrics[metric_name] = {"value": row[1], "unit": unit}
+        metrics[metric_name] = {"value": row[1], "unit": unit, "tags": None}
     return metrics
 
 
@@ -293,6 +299,7 @@ def parse_stream(path):
         current_idx = col_map.get("current")
         value_idx = col_map.get("value")
         unit_idx = col_map.get("unit")
+        tags_idx = col_map.get("tags")
         if current_idx is None and value_idx is None:
             raise ValueError("missing required column: Current or Value")
         value = None
@@ -305,5 +312,8 @@ def parse_stream(path):
             unit = row[unit_idx]
         if unit is None and metric_name in unit_map:
             unit = unit_map[metric_name]
-        metrics[metric_name] = {"value": value, "unit": unit}
+        tags = None
+        if tags_idx is not None and tags_idx < len(row):
+            tags = row[tags_idx]
+        metrics[metric_name] = {"value": value, "unit": unit, "tags": tags}
     return metrics

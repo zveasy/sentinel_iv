@@ -1,0 +1,6 @@
+variant: fd003
+purpose: regression_calibration_only
+warn_threshold: 3.0
+fail_threshold: 5.0
+fail_persistence_cycles: 8
+notes: "Tuned to ensure late window escalates to FAIL for regression harness stability."

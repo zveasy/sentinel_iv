@@ -1,0 +1,14 @@
+variant: fd003
+purpose: regression_calibration_only
+warn_threshold: 3.0
+fail_threshold: 7.044
+fail_persistence_cycles: 8
+spike_guard:
+  enabled: true
+  severe_threshold_percentile: 80
+  severe_persistence_cycles: 2
+notes: >
+  Auto-tuned p50=7.044 from engine=1 window=150-200; regression calibration only.
+  FD003 exhibits lower sustained drift magnitude than FD002/FD004.
+  Spike-guard added to ensure late-window escalation to FAIL in regression
+  without reducing persistence guarantees. Not applied to other variants.

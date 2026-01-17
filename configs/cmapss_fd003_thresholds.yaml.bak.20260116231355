@@ -1,0 +1,6 @@
+variant: fd003
+purpose: regression_calibration_only
+warn_threshold: 3.0
+fail_threshold: 9.314
+fail_persistence_cycles: 8
+notes: "Auto-tuned p70=9.314 from engine=1 window=150-200; regression calibration only."

@@ -12,6 +12,9 @@ metrics:
       ms: 1
       us: 0.001
       s: 1000
+    invariant_max: 50
+    distribution_drift:
+      ks_threshold: 0.2
   max_latency_ms:
     aliases:
       - Max Task Latency (ms)
@@ -25,6 +28,9 @@ metrics:
       ms: 1
       us: 0.001
       s: 1000
+    invariant_max: 100
+    distribution_drift:
+      ks_threshold: 0.2
   reset_count:
     aliases:
       - Reset Count
@@ -32,6 +38,7 @@ metrics:
     drift_threshold: 1
     critical: true
     fail_threshold: 0
+    invariant_eq: 0
   watchdog_triggers:
     aliases:
       - Watchdog Triggers
@@ -39,6 +46,7 @@ metrics:
     drift_threshold: 1
     critical: true
     fail_threshold: 0
+    invariant_eq: 0
   error_code_frequency:
     aliases:
       - Error Code Frequency
@@ -46,8 +54,23 @@ metrics:
     drift_threshold: 0.05
     drift_percent: 20.0
     min_effect: 0.005
+    invariant_max: 0.1
   missed_deadlines:
     aliases:
       - Missed Deadlines
       - Deadline Misses
     drift_threshold: 1
+    invariant_max: 0
+  cmapss_sensor_mean:
+    aliases:
+      - CMAPSS Sensor Mean
+    drift_threshold: 0.1
+    drift_percent: 5.0
+    min_effect: 0.01
+  cmapss_sensor_std:
+    aliases:
+      - CMAPSS Sensor Std
+    drift_threshold: 0.1
+    drift_percent: 5.0
+    min_effect: 0.01
+    invariant_min: 2463.5

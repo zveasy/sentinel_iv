@@ -18,6 +18,11 @@ def init_db(path):
             subsystem TEXT,
             test_name TEXT,
             environment TEXT,
+            operating_mode TEXT,
+            scenario_id TEXT,
+            sensor_config_id TEXT,
+            input_data_version TEXT,
+            environment_fingerprint TEXT,
             build_sha TEXT,
             build_id TEXT,
             start_utc TEXT,
@@ -70,6 +75,16 @@ def init_db(path):
     columns = {row[1] for row in cursor.fetchall()}
     if "registry_hash" not in columns:
         conn.execute("ALTER TABLE runs ADD COLUMN registry_hash TEXT")
+    if "operating_mode" not in columns:
+        conn.execute("ALTER TABLE runs ADD COLUMN operating_mode TEXT")
+    if "scenario_id" not in columns:
+        conn.execute("ALTER TABLE runs ADD COLUMN scenario_id TEXT")
+    if "sensor_config_id" not in columns:
+        conn.execute("ALTER TABLE runs ADD COLUMN sensor_config_id TEXT")
+    if "input_data_version" not in columns:
+        conn.execute("ALTER TABLE runs ADD COLUMN input_data_version TEXT")
+    if "environment_fingerprint" not in columns:
+        conn.execute("ALTER TABLE runs ADD COLUMN environment_fingerprint TEXT")
     cursor = conn.execute("PRAGMA table_info(baseline_approvals)")
     approval_columns = {row[1] for row in cursor.fetchall()}
     if "request_id" not in approval_columns:
@@ -109,9 +124,10 @@ def upsert_run(conn, run_meta, status, baseline_run_id=None, registry_hash=None)
         """
         INSERT INTO runs (
             run_id, program, subsystem, test_name, environment,
+            operating_mode, scenario_id, sensor_config_id, input_data_version, environment_fingerprint,
             build_sha, build_id, start_utc, end_utc, source_system,
             registry_hash, status, baseline_run_id, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(run_id) DO UPDATE SET
             status=excluded.status,
             baseline_run_id=excluded.baseline_run_id
@@ -122,6 +138,11 @@ def upsert_run(conn, run_meta, status, baseline_run_id=None, registry_hash=None)
             run_meta.get("subsystem"),
             run_meta.get("test_name"),
             run_meta.get("environment"),
+            run_meta.get("operating_mode"),
+            run_meta.get("scenario_id"),
+            run_meta.get("sensor_config_id"),
+            run_meta.get("input_data_version"),
+            run_meta.get("environment_fingerprint"),
             run_meta.get("build", {}).get("git_sha"),
             run_meta.get("build", {}).get("build_id"),
             run_meta.get("timestamps", {}).get("start_utc"),
@@ -158,9 +179,30 @@ def fetch_metrics(conn, run_id):
     return metrics
 
 
+def _context_match(run_meta, candidate, fields):
+    matched = []
+    considered = 0
+    for field in fields:
+        current_value = run_meta.get(field)
+        if current_value in (None, ""):
+            continue
+        considered += 1
+        if candidate.get(field) == current_value:
+            matched.append(field)
+    return matched, considered
+
+
 def select_baseline(conn, run_meta, policy, registry_hash=None):
     tag = policy.get("tag")
     warn_on_mismatch = policy.get("warn_on_mismatch", False)
+    context_fields = policy.get("context_match") or [
+        "scenario_id",
+        "operating_mode",
+        "environment",
+        "environment_fingerprint",
+        "sensor_config_id",
+        "input_data_version",
+    ]
 
     if tag:
         cursor = conn.execute(
@@ -172,11 +214,22 @@ def select_baseline(conn, run_meta, policy, registry_hash=None):
             warning = None
             if warn_on_mismatch and registry_hash and row[1] and row[1] != registry_hash:
                 warning = f"baseline registry hash mismatch ({row[1]} != {registry_hash})"
-            return row[0], "tag", warning
-        return None, "tag_not_found", None
+            return row[0], "tag", warning, {
+                "level": "TAG",
+                "matched_fields": [],
+                "score": 0,
+                "possible": 0,
+            }
+        return None, "tag_not_found", None, {
+            "level": "NONE",
+            "matched_fields": [],
+            "score": 0,
+            "possible": 0,
+        }
 
     query = """
-        SELECT run_id, status
+        SELECT run_id, status, environment, operating_mode, scenario_id,
+               sensor_config_id, input_data_version, environment_fingerprint
         FROM runs
         WHERE program = ? AND subsystem = ? AND test_name = ?
         ORDER BY created_at DESC
@@ -189,13 +242,104 @@ def select_baseline(conn, run_meta, policy, registry_hash=None):
     cursor = conn.execute(query, params)
     rows = cursor.fetchall()
     if not rows:
-        return None, "no_runs", None
-    for run_id, status in rows:
+        return None, "no_runs", None, {"level": "NONE", "matched_fields": [], "score": 0, "possible": 0}
+
+    best = None
+    best_score = -1
+    best_possible = 0
+    best_matched = []
+    for (
+        run_id,
+        status,
+        environment,
+        operating_mode,
+        scenario_id,
+        sensor_config_id,
+        input_data_version,
+        environment_fingerprint,
+    ) in rows:
+        candidate = {
+            "environment": environment,
+            "operating_mode": operating_mode,
+            "scenario_id": scenario_id,
+            "sensor_config_id": sensor_config_id,
+            "input_data_version": input_data_version,
+            "environment_fingerprint": environment_fingerprint,
+        }
+        matched, considered = _context_match(run_meta, candidate, context_fields)
+        score = len(matched)
         if status == "PASS":
-            return run_id, "last_pass", None
+            if score > best_score:
+                best = run_id
+                best_score = score
+                best_possible = considered
+                best_matched = matched
+
+    if best:
+        if best_possible == 0:
+            level = "NONE"
+        elif best_score == best_possible:
+            level = "HIGH"
+        elif best_score > 0:
+            level = "MED"
+        else:
+            level = "LOW"
+        warning = None
+        if best_possible > 0 and best_score < best_possible:
+            warning = f"context mismatch: matched {best_score}/{best_possible}"
+        return (
+            best,
+            "last_pass",
+            warning,
+            {
+                "level": level,
+                "matched_fields": best_matched,
+                "score": best_score,
+                "possible": best_possible,
+            },
+        )
+
     if policy.get("fallback") == "latest":
-        return rows[0][0], "fallback_latest", None
-    return None, "no_pass", None
+        (
+            run_id,
+            _,
+            environment,
+            operating_mode,
+            scenario_id,
+            sensor_config_id,
+            input_data_version,
+            environment_fingerprint,
+        ) = rows[0]
+        candidate = {
+            "environment": environment,
+            "operating_mode": operating_mode,
+            "scenario_id": scenario_id,
+            "sensor_config_id": sensor_config_id,
+            "input_data_version": input_data_version,
+            "environment_fingerprint": environment_fingerprint,
+        }
+        matched, considered = _context_match(run_meta, candidate, context_fields)
+        score = len(matched)
+        if considered == 0:
+            level = "NONE"
+        elif score == considered:
+            level = "HIGH"
+        elif score > 0:
+            level = "MED"
+        else:
+            level = "LOW"
+        return (
+            run_id,
+            "fallback_latest",
+            "fallback_latest",
+            {
+                "level": level,
+                "matched_fields": matched,
+                "score": score,
+                "possible": considered,
+            },
+        )
+    return None, "no_pass", None, {"level": "NONE", "matched_fields": [], "score": 0, "possible": 0}
 
 
 def set_baseline_tag(conn, tag, run_id, registry_hash):

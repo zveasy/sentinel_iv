@@ -14,5 +14,10 @@
   },
   "toolchain": {
     "source_system": "pba_excel"
-  }
+  },
+  "operating_mode": "nominal",
+  "scenario_id": "single_metric_drift",
+  "sensor_config_id": "sensor-pack-a",
+  "input_data_version": "dataset-v1",
+  "environment_fingerprint": "lab-rack-01"
 }

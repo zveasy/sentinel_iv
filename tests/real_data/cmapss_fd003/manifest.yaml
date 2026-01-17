@@ -1,0 +1,28 @@
+dataset:
+  name: cmapss_fd003
+  dataset_root: ${CMAPSS_ROOT}
+  files:
+    train: train_FD003.txt
+    test: test_FD003.txt
+    rul: RUL_FD003.txt
+windows:
+  - name: fd003_engine_1_early
+    engine_id: 1
+    start_cycle: 1
+    end_cycle: 50
+    baseline: fd003_engine_1_early
+    expected_status: PASS
+  - name: fd003_engine_1_mid
+    engine_id: 1
+    start_cycle: 51
+    end_cycle: 130
+    baseline: fd003_engine_1_early
+    expected_status:
+      - PASS_WITH_DRIFT
+      - FAIL
+  - name: fd003_engine_1_late
+    engine_id: 1
+    start_cycle: 131
+    end_cycle: 200
+    baseline: fd003_engine_1_early
+    expected_status: FAIL

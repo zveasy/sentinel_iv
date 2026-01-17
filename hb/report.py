@@ -46,6 +46,37 @@ def write_report(report_dir, payload):
         )
     drift_table = "\n".join(drift_rows)
 
+    baseline_reason = payload.get("baseline_reason") or "unknown"
+    match_level = payload.get("baseline_match_level") or "none"
+    match_score = payload.get("baseline_match_score")
+    match_possible = payload.get("baseline_match_possible")
+    match_line = f"{match_level}"
+    if match_score is not None and match_possible is not None:
+        match_line = f"{match_level} ({match_score}/{match_possible})"
+    match_fields = ", ".join(payload.get("baseline_match_fields") or [])
+
+    drivers = []
+    for item in payload.get("top_drifts", []):
+        drivers.append(f"{item['metric']} ({item['delta']})")
+    top_drivers = ", ".join(drivers) if drivers else "none"
+
+    dist_rows = []
+    for item in payload.get("distribution_drifts", []):
+        dist_rows.append(
+            "<tr>"
+            f"<td>{item['metric']}</td>"
+            f"<td>{item.get('method')}</td>"
+            f"<td>{item.get('statistic')}</td>"
+            f"<td>{item.get('threshold')}</td>"
+            f"<td>{item.get('sample_count_baseline')}</td>"
+            f"<td>{item.get('sample_count_current')}</td>"
+            "</tr>"
+        )
+    dist_table = "\n".join(dist_rows) if dist_rows else "<tr><td colspan=\"6\">none</td></tr>"
+
+    baseline_warning = payload.get("baseline_warning")
+    mismatch_expected = "yes" if payload.get("context_mismatch_expected") else "no"
+
     html_doc = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -67,6 +98,12 @@ def write_report(report_dir, payload):
   <div>Status: {payload['status']}</div>
   <div>Run ID: {payload['run_id']}</div>
   <div>Baseline Run ID: {payload.get('baseline_run_id') or 'none'}</div>
+  <div>Baseline Reason: {baseline_reason}</div>
+  <div>Baseline Match Level: {match_line}</div>
+  <div>Baseline Match Fields: {match_fields}</div>
+  <div>Context Mismatch Expected: {mismatch_expected}</div>
+  <div>Baseline Warning: {baseline_warning or 'none'}</div>
+  <div>Top Drivers: {top_drivers}</div>
   <h2>Drift Metrics</h2>
   <table>
     <thead>
@@ -85,6 +122,22 @@ def write_report(report_dir, payload):
     </thead>
     <tbody>
       {drift_table}
+    </tbody>
+  </table>
+  <h2>Distribution Drift</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Method</th>
+        <th>Statistic</th>
+        <th>Threshold</th>
+        <th>Baseline Samples</th>
+        <th>Current Samples</th>
+      </tr>
+    </thead>
+    <tbody>
+      {dist_table}
     </tbody>
   </table>
 </body>

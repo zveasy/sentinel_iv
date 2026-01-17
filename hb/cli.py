@@ -9,7 +9,13 @@ from datetime import datetime, timezone
 import yaml
 
 from hb import engine
-from hb.adapters import pba_excel_adapter
+from hb.adapters import (
+    pba_excel_adapter,
+    cmapss_fd001,
+    cmapss_fd002,
+    cmapss_fd003,
+    cmapss_fd004,
+)
 from hb.io import read_json, write_json, write_metrics_csv
 from hb.registry import (
     init_db,
@@ -88,6 +94,10 @@ def normalize_run_meta(run_meta, source_system):
 def ingest(args):
     adapter_map = {
         "pba_excel": pba_excel_adapter,
+        "cmapss_fd001": cmapss_fd001,
+        "cmapss_fd002": cmapss_fd002,
+        "cmapss_fd003": cmapss_fd003,
+        "cmapss_fd004": cmapss_fd004,
     }
     if args.source not in adapter_map:
         raise HBError(f"unknown source adapter: {args.source}", EXIT_CONFIG)
@@ -116,7 +126,7 @@ def ingest(args):
                 "metric": metric,
                 "value": data["value"],
                 "unit": data.get("unit") or "",
-                "tags": "",
+                "tags": data.get("tags") or "",
             }
         )
     write_metrics_csv(os.path.join(out_dir, "metrics_normalized.csv"), metrics_rows)
@@ -135,9 +145,10 @@ def analyze(args):
     policy = load_baseline_policy(args.baseline_policy)
     registry_hash = file_hash(args.metric_registry)
     redaction_policy = args.redaction_policy
+    distribution_enabled = policy.get("distribution_drift_enabled", True)
 
     conn = init_db(args.db)
-    baseline_run_id, baseline_reason, baseline_warning = select_baseline(
+    baseline_run_id, baseline_reason, baseline_warning, baseline_match = select_baseline(
         conn, run_meta, policy, registry_hash=registry_hash
     )
     if baseline_run_id:
@@ -153,8 +164,18 @@ def analyze(args):
             "tags": row.get("tags") or None,
         }
 
-    status, drift_metrics, warnings, fail_metrics = engine.compare_metrics(
-        metrics_current, baseline_metrics, registry
+    (
+        status,
+        drift_metrics,
+        warnings,
+        fail_metrics,
+        invariant_violations,
+        distribution_drifts,
+    ) = engine.compare_metrics(
+        metrics_current, baseline_metrics, registry, distribution_enabled=distribution_enabled
+    )
+    context_mismatch_expected = bool(
+        baseline_warning and str(baseline_warning).startswith("context mismatch")
     )
 
     report_meta = run_meta
@@ -171,10 +192,17 @@ def analyze(args):
         "baseline_run_id": baseline_run_id,
         "baseline_reason": baseline_reason,
         "baseline_warning": baseline_warning,
+        "baseline_match_level": baseline_match.get("level"),
+        "baseline_match_fields": baseline_match.get("matched_fields", []),
+        "baseline_match_score": baseline_match.get("score"),
+        "baseline_match_possible": baseline_match.get("possible"),
+        "context_mismatch_expected": context_mismatch_expected,
         "drift_metrics": drift_metrics,
         "top_drifts": drift_metrics[: args.top],
+        "distribution_drifts": distribution_drifts,
         "warnings": warnings,
         "fail_metrics": fail_metrics,
+        "invariant_violations": invariant_violations,
     }
 
     report_dir = os.path.join(args.reports, report_meta["run_id"])
@@ -188,6 +216,8 @@ def analyze(args):
         pdf_path = None
 
     baseline_line = f"baseline: {baseline_run_id or 'none'} ({baseline_reason})"
+    if baseline_match.get("level"):
+        baseline_line += f" match={baseline_match.get('level')}"
     print(baseline_line)
     if baseline_warning:
         print(f"baseline warning: {baseline_warning}")

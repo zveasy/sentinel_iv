@@ -1,3 +1,5 @@
+import json
+
 from hb.registry_utils import normalize_alias
 
 
@@ -39,14 +41,66 @@ def normalize_metrics(raw_metrics, metric_registry):
         value = _to_float(data.get("value"))
         unit = data.get("unit")
         value, unit = _unit_convert(value, unit, config)
-        normalized[canonical] = {"value": value, "unit": unit}
+        normalized[canonical] = {
+            "value": value,
+            "unit": unit,
+            "tags": data.get("tags"),
+        }
     return normalized, sorted(warnings)
 
 
-def compare_metrics(current, baseline, metric_registry):
+def _extract_samples(metric):
+    tags = metric.get("tags")
+    if not tags:
+        return None
+    if isinstance(tags, dict):
+        samples = tags.get("samples")
+    else:
+        try:
+            parsed = json.loads(tags)
+        except (TypeError, json.JSONDecodeError):
+            return None
+        if not isinstance(parsed, dict):
+            return None
+        samples = parsed.get("samples")
+    if not isinstance(samples, list):
+        return None
+    cleaned = []
+    for value in samples:
+        try:
+            cleaned.append(float(value))
+        except (TypeError, ValueError):
+            continue
+    return cleaned or None
+
+
+def _ks_statistic(sample_a, sample_b):
+    a = sorted(sample_a)
+    b = sorted(sample_b)
+    if not a or not b:
+        return None
+    i = 0
+    j = 0
+    n = len(a)
+    m = len(b)
+    d = 0.0
+    while i < n and j < m:
+        if a[i] <= b[j]:
+            i += 1
+        else:
+            j += 1
+        cdf_a = i / n
+        cdf_b = j / m
+        d = max(d, abs(cdf_a - cdf_b))
+    return d
+
+
+def compare_metrics(current, baseline, metric_registry, distribution_enabled=True):
     drift = []
     warnings = []
     fail = []
+    invariant_violations = []
+    distribution_drifts = []
     all_metrics = sorted(set(current.keys()) | set(baseline.keys()))
     for metric in all_metrics:
         config = metric_registry["metrics"].get(metric, {})
@@ -55,6 +109,27 @@ def compare_metrics(current, baseline, metric_registry):
         if cur is None or cur.get("value") is None:
             warnings.append(f"missing current metric: {metric}")
             continue
+        invariant_min = config.get("invariant_min")
+        invariant_max = config.get("invariant_max")
+        invariant_eq = config.get("invariant_eq")
+        violated = False
+        if invariant_eq is not None and cur["value"] != invariant_eq:
+            violated = True
+        if invariant_min is not None and cur["value"] < invariant_min:
+            violated = True
+        if invariant_max is not None and cur["value"] > invariant_max:
+            violated = True
+        if violated:
+            invariant_violations.append(
+                {
+                    "metric": metric,
+                    "current": cur["value"],
+                    "invariant_min": invariant_min,
+                    "invariant_max": invariant_max,
+                    "invariant_eq": invariant_eq,
+                }
+            )
+            fail.append(metric)
         if config.get("critical"):
             fail_threshold = config.get("fail_threshold")
             if fail_threshold is None and cur["value"] > 0:
@@ -98,12 +173,33 @@ def compare_metrics(current, baseline, metric_registry):
                 }
             )
 
+        dist_cfg = config.get("distribution_drift") or {}
+        if not distribution_enabled:
+            dist_cfg = {}
+        if dist_cfg:
+            cur_samples = _extract_samples(cur)
+            base_samples = _extract_samples(base)
+            if cur_samples and base_samples:
+                ks = _ks_statistic(cur_samples, base_samples)
+                ks_threshold = dist_cfg.get("ks_threshold")
+                if ks is not None and ks_threshold is not None and ks > ks_threshold:
+                    distribution_drifts.append(
+                        {
+                            "metric": metric,
+                            "method": "ks",
+                            "statistic": ks,
+                            "threshold": ks_threshold,
+                            "sample_count_current": len(cur_samples),
+                            "sample_count_baseline": len(base_samples),
+                        }
+                    )
+
     if fail:
         status = "FAIL"
-    elif drift:
+    elif drift or distribution_drifts:
         status = "PASS_WITH_DRIFT"
     else:
         status = "PASS"
 
     drift_sorted = sorted(drift, key=lambda item: abs(item["delta"]), reverse=True)
-    return status, drift_sorted, warnings, fail
+    return status, drift_sorted, warnings, fail, invariant_violations, distribution_drifts

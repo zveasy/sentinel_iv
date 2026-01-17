@@ -140,6 +140,7 @@ Exit codes:
 Artifacts:
 - `run_contract.md` describes `run_meta.json`, `metrics.csv`, and optional `events.jsonl`.
 - Reports are written to `mvp/reports/<run_id>/` as `drift_report.json` and `drift_report.html`.
+- Reports include baseline reason, match level, and top drift drivers for explainability.
 - Optional PDF export uses `wkhtmltopdf` if installed (`drift_report.pdf`).
 - If `wkhtmltopdf` is not available, a pure-Python fallback uses `fpdf2`.
 - Each report folder includes `artifact_manifest.json` and `audit_log.jsonl`.
@@ -233,6 +234,43 @@ python tools/retention_prune.py --policy retention_policy.yaml --db runs.db
 ```
 chmod +x tools/backup_registry.sh
 tools/backup_registry.sh runs.db backups
+```
+
+Distribution drift (optional):
+- If a metric's `tags` contains JSON with `"samples": [...]`, Harmony Bridge can run a KS statistic.
+- Configure with `distribution_drift` in `metric_registry.yaml`.
+- Toggle distribution drift with `distribution_drift_enabled` in `baseline_policy.yaml`.
+Example Tags JSON in CSV:
+```
+Metric,Baseline,Current,Delta,Threshold,Unit,Tags,Status
+avg_latency_ms,10,10,,,ms,"{""samples"":[9,10,10,11,9,10,10,11]}",
+```
+
+Context-aware baseline fields:
+- `run_meta.json` can include `operating_mode`, `scenario_id`, `sensor_config_id`, `input_data_version`, and `environment_fingerprint`.
+- When present, baseline selection prefers runs with matching context and reports match level in the output.
+
+CMAPSS FD001 regression (local dataset):
+```
+export CMAPSS_ROOT=/Users/zakariyaveasy/Downloads/CMAPSSData
+python tests/real_data/cmapss_fd001/run_regression.py
+```
+CMAPSS FD002–FD004 regression (local dataset):
+```
+export CMAPSS_ROOT=/Users/zakariyaveasy/Downloads/CMAPSSData
+python tests/real_data/cmapss_fd002/run_regression.py
+python tests/real_data/cmapss_fd003/run_regression.py
+python tests/real_data/cmapss_fd004/run_regression.py
+```
+CMAPSS auto-tune helper (dry-run by default):
+```
+export CMAPSS_ROOT=/Users/zakariyaveasy/Downloads/CMAPSSData
+python tools/cmapss_autotune.py --variant fd003 --engine 1 --window 150 200 --p 0.70
+python tools/cmapss_autotune.py --variant fd003 --engine 1 --window 150 200 --p 0.70 --write
+```
+CI guard for CMAPSS configs:
+```
+python tools/ci/check_cmapss_config_usage.py --config configs/cmapss_fd003_thresholds.yaml --allow-regression
 ```
 
 Performance tools:

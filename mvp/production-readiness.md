@@ -20,16 +20,19 @@ Metrics and configuration:
 - Versioned metric definitions and thresholds per program. (partial)
 - Percent/absolute drift rules and rolling baselines. (done)
 - Config validation with defaults. (partial)
+- Invariant rules in metric registry (e.g., watchdog_triggers == 0). (not started)
 
 Storage and traceability:
 - Run registry (SQLite) with metadata. (done)
 - Immutable artifacts, hashes, and audit logs. (done)
 - Baseline lineage and provenance tracking. (partial)
+- Context-aware baseline matching (scenario/mode/environment) with fallback warnings. (not started)
 
 Reporting and visualization:
 - HTML/PDF with summary tables and “why flagged” narratives. (done)
 - Diff visualizations and trend charts. (partial)
 - Exportable artifacts for QA/audits. (done)
+- Baseline explainability: reason + match level + top drivers. (not started)
 
 Security and compliance:
 - Access control, encryption at rest, secure logging. (partial)
@@ -40,6 +43,7 @@ Reliability and performance:
 - Deterministic output, idempotent runs. (done)
 - Graceful failures with clear exit codes. (done)
 - Large-file and long-run performance profiling. (partial)
+- Optional distribution drift checks for key metrics when samples exist. (not started)
 
 Testing:
 - Unit tests for parsers and metrics. (done)
