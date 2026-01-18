@@ -9,6 +9,9 @@ from datetime import datetime, timezone
 import yaml
 
 from hb import engine
+from hb import feedback
+from hb import local_ui
+from hb import watch
 from hb.adapters import (
     cmapss_fd001,
     cmapss_fd002,
@@ -16,6 +19,7 @@ from hb.adapters import (
     cmapss_fd004,
     nasa_http_tsv,
     pba_excel_adapter,
+    smap_msl_adapter,
 )
 from hb.io import read_json, write_json, write_metrics_csv
 from hb.registry import (
@@ -100,6 +104,7 @@ def ingest(args):
         "cmapss_fd003": cmapss_fd003,
         "cmapss_fd004": cmapss_fd004,
         "nasa_http_tsv": nasa_http_tsv,
+        "smap_msl": smap_msl_adapter,
     }
     if args.source not in adapter_map:
         raise HBError(f"unknown source adapter: {args.source}", EXIT_CONFIG)
@@ -237,6 +242,8 @@ def analyze(args):
         "run_id": report_meta["run_id"],
         "status": status,
         "baseline_run_id": baseline_run_id,
+        "hb_version": os.environ.get("HB_VERSION", "dev"),
+        "source_type": run_meta.get("toolchain", {}).get("source_system"),
         "baseline_reason": baseline_reason,
         "baseline_warning": baseline_warning,
         "baseline_match_level": baseline_match.get("level"),
@@ -341,6 +348,21 @@ def run(args):
     report_dir = analyze(analyze_args)
     print(f"run output: {report_dir}")
     return report_dir
+
+
+def feedback_record(args):
+    payload = feedback.load_feedback_payload(args.input)
+    feedback.write_feedback_record(payload, log_path=args.log)
+    print(f"feedback recorded: {args.log or feedback.default_log_path()}")
+
+
+def feedback_export(args):
+    feedback.export_feedback(args.log, args.output, mode=args.mode)
+    print(f"feedback export written: {args.output}")
+
+
+def feedback_serve(args):
+    feedback.serve_feedback(port=args.port, log_path=args.log)
 
 
 def baseline_set(args):
@@ -601,6 +623,36 @@ def main():
     verify_parser.add_argument("--report-dir", required=True)
     verify_parser.add_argument("--sign-key", required=False)
 
+    ui_parser = subparsers.add_parser("ui", help="run local web UI (localhost only)")
+    ui_parser.add_argument("--port", type=int, default=int(os.environ.get("HB_UI_PORT", 8890)))
+
+    watch_parser = subparsers.add_parser("watch", help="watch a folder and run drift checks")
+    watch_parser.add_argument("--dir", required=True, help="directory to watch")
+    watch_parser.add_argument("--source", required=True, help="source type")
+    watch_parser.add_argument("--pattern", default="*", help="glob pattern for files")
+    watch_parser.add_argument("--interval", type=int, default=604800, help="poll interval in seconds")
+    watch_parser.add_argument("--workspace", default=None, help="workspace root (default ~/.harmony_bridge)")
+    watch_parser.add_argument("--run-meta", default=None, help="run_meta.json to apply to all files")
+    watch_parser.add_argument("--run-meta-dir", default=None, help="directory with per-file run_meta.json")
+    watch_parser.add_argument("--open-report", action="store_true", help="auto-open reports")
+    watch_parser.add_argument("--once", action="store_true", help="process current files then exit")
+
+    feedback_parser = subparsers.add_parser("feedback", help="feedback utilities")
+    feedback_sub = feedback_parser.add_subparsers(dest="feedback_cmd", required=True)
+
+    feedback_record_cmd = feedback_sub.add_parser("record", help="record feedback payload")
+    feedback_record_cmd.add_argument("--input", required=True, help="path to feedback JSON payload")
+    feedback_record_cmd.add_argument("--log", default=None, help="override feedback log path")
+
+    feedback_export_cmd = feedback_sub.add_parser("export", help="export feedback summary or raw records")
+    feedback_export_cmd.add_argument("--log", default=None, help="override feedback log path")
+    feedback_export_cmd.add_argument("--output", required=True, help="output JSON path")
+    feedback_export_cmd.add_argument("--mode", choices=["summary", "raw"], default="summary")
+
+    feedback_serve_cmd = feedback_sub.add_parser("serve", help="run local feedback server")
+    feedback_serve_cmd.add_argument("--log", default=None, help="override feedback log path")
+    feedback_serve_cmd.add_argument("--port", type=int, default=int(os.environ.get("HB_FEEDBACK_PORT", 8765)))
+
     db_parser = subparsers.add_parser("db", help="database utilities")
     db_sub = db_parser.add_subparsers(dest="db_cmd", required=True)
     db_encrypt = db_sub.add_parser("encrypt", help="encrypt runs.db with sqlcipher")
@@ -681,6 +733,27 @@ def main():
                 runs_list(args)
         elif args.command == "verify":
             verify_report(args)
+        elif args.command == "ui":
+            local_ui.serve_local_ui(port=args.port)
+        elif args.command == "watch":
+            watch.run_watch(
+                watch_dir=args.dir,
+                source=args.source,
+                pattern=args.pattern,
+                interval=args.interval,
+                workspace=args.workspace,
+                run_meta=args.run_meta,
+                run_meta_dir=args.run_meta_dir,
+                open_report=args.open_report,
+                once=args.once,
+            )
+        elif args.command == "feedback":
+            if args.feedback_cmd == "record":
+                feedback_record(args)
+            elif args.feedback_cmd == "export":
+                feedback_export(args)
+            elif args.feedback_cmd == "serve":
+                feedback_serve(args)
         elif args.command == "db":
             script_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tools"))
             if args.db_cmd == "encrypt":

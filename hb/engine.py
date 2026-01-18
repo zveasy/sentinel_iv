@@ -424,6 +424,8 @@ def compare_metrics(current, baseline, metric_registry, distribution_enabled=Tru
                 "fail_threshold": config.get("fail_threshold"),
                 "persistence_cycles": int(config.get("drift_persistence", 5)),
                 "score_type": score_type,
+                "drift_threshold": drift_threshold,
+                "drift_percent": drift_percent,
                 "flagged": flagged,
             }
         )

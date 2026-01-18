@@ -122,9 +122,8 @@ def _coerce_numeric(series, field):
     return numeric, False
 
 
-def load_series(root, spacecraft, chan_id, split=None):
+def load_series_from_path(path):
     schema = load_smap_msl_telemetry_schema()
-    path = resolve_channel_path(root, spacecraft, chan_id, split=split)
     ext = os.path.splitext(path)[1].lower()
     if ext == ".npy":
         values = np.load(path, allow_pickle=False)
@@ -157,6 +156,11 @@ def load_series(root, spacecraft, chan_id, split=None):
 
     series = pd.DataFrame({"index": indices, "value": values.astype(float)})
     return series
+
+
+def load_series(root, spacecraft, chan_id, split=None):
+    path = resolve_channel_path(root, spacecraft, chan_id, split=split)
+    return load_series_from_path(path)
 
 
 def metrics_from_series(series, sample_size=1000):

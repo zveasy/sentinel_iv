@@ -102,12 +102,25 @@ Additional advisors and contracted contributors will include:
 
 Harmony Bridge is a system-agnostic drift detection layer. It does not run tests; it consumes exported artifacts (Excel/CSV/JSON logs) and compares current runs to baselines.
 
-Quickstart:
+Operator Quickstart (Local Web UI):
+```
+# Install Harmony Bridge locally (single command, no data leaves your machine)
+pip install -r hb/requirements.txt -r hb/requirements-dev.txt
+
+chmod +x bin/hb
+bin/hb ui
+```
+Then open `http://127.0.0.1:8890/` and follow the on‑screen steps.
+
+Developer Setup:
 ```
 python -m venv .venv
 source .venv/bin/activate
 pip install -r hb/requirements.txt -r hb/requirements-dev.txt
+```
 
+CLI Quickstart:
+```
 chmod +x bin/hb
 bin/hb ingest --source pba_excel samples/cases/no_drift_pass/current_source.csv --run-meta samples/cases/no_drift_pass/current_run_meta.json --out runs/no_drift_pass_current
 bin/hb analyze --run runs/no_drift_pass_current
@@ -118,6 +131,7 @@ Commands:
 bin/hb ingest --source pba_excel <path-to-file> --run-meta <run_meta.json> --out runs/<run_id>/
 bin/hb analyze --run runs/<run_id>/ --baseline-policy baseline_policy.yaml
 bin/hb run --source pba_excel <path-to-file> --run-meta <run_meta.json>
+bin/hb ui
 bin/hb baseline set <run_id> --tag golden
 bin/hb baseline request <run_id> --tag golden --requested-by "name"
 bin/hb baseline approve <run_id> --tag golden --approved-by "name"
@@ -329,6 +343,77 @@ Tests:
 ```
 pytest -q
 ```
+
+Feedback loop (local only):
+- Start the local feedback server:
+```
+bin/hb feedback serve
+```
+- Open the Feedback Hub (local UI): `http://127.0.0.1:8765/`
+- This runs a Local Feedback Service (only on your machine). It never accepts external connections.
+- Use the report UI buttons (Correct / Too Sensitive / Missed Severity) and optional note/time.
+- Opt-in toggle is required before sending.
+- Info icon tooltips explain privacy and decision basis details.
+- Feedback is stored locally at `$HB_HOME/feedback/feedback_log.jsonl` (default `~/.hb/feedback/feedback_log.jsonl`).
+- Export a summary or raw records:
+```
+bin/hb feedback export --output feedback_summary.json --mode summary
+bin/hb feedback export --output feedback_raw.json --mode raw
+```
+
+Feedback loop quick test (no data leaves the machine):
+1) Start server:
+```
+bin/hb feedback serve
+```
+2) Generate a drift report (example):
+```
+bin/hb run --source pba_excel samples/cases/single_metric_drift/baseline_source.csv \
+  --run-meta samples/cases/single_metric_drift/baseline_run_meta.json \
+  --db /tmp/hb_feedback_test.db --reports /tmp/hb_feedback_reports
+bin/hb run --source pba_excel samples/cases/single_metric_drift/current_source.csv \
+  --run-meta samples/cases/single_metric_drift/current_run_meta.json \
+  --db /tmp/hb_feedback_test.db --reports /tmp/hb_feedback_reports
+```
+3) Open the report:
+```
+open /tmp/hb_feedback_reports/single_metric_drift_current/drift_report.html
+```
+4) In the report UI:
+   - Enable feedback sending.
+   - Click Correct / Too Sensitive / Missed Severity.
+   - Add an optional note and time-to-resolution.
+5) Verify receipt:
+```
+curl http://127.0.0.1:8765/count
+```
+6) Download a summary from the Feedback Hub or:
+```
+curl http://127.0.0.1:8765/export?mode=summary
+```
+
+Local Web UI (localhost only):
+- Start the UI (binds to `127.0.0.1` only):
+```
+bin/hb ui
+```
+- Open `http://127.0.0.1:8890/`
+- Choose a workspace (default `~/.harmony_bridge`).
+- Install Baseline, then Analyze/Compare with the current run.
+- The report auto-opens and is linked in the UI.
+- Export Support Bundle (report + logs + manifest, no raw inputs) from the UI after a run.
+- Use the Watch Folder panel to start/stop periodic checks without a terminal.
+
+Watch folder (periodic drift checks, local only):
+```
+bin/hb watch --dir /path/to/incoming --source pba_excel --pattern "*.csv" --interval 604800
+```
+Options:
+- `--run-meta /path/to/run_meta.json` for a shared run meta.
+- `--run-meta-dir /path/to/run_meta/` to match `file.csv` with `file.json`.
+- `--workspace /path/to/workspace` (default `~/.harmony_bridge`).
+- `--open-report` to auto-open each report.
+- `--once` to process current files and exit.
 
 Sample cases quick-run (baseline + current for every case, then open reports):
 ```
