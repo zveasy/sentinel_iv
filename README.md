@@ -403,6 +403,7 @@ bin/hb ui
 - The report auto-opens and is linked in the UI.
 - Export Support Bundle (report + logs + manifest, no raw inputs) from the UI after a run.
 - Use the Watch Folder panel to start/stop periodic checks without a terminal.
+- Interval presets: Weekly / Monthly / Yearly.
 
 Watch folder (periodic drift checks, local only):
 ```
