@@ -2,6 +2,7 @@ import csv
 import os
 
 from hb.registry_utils import normalize_alias
+from hb.schema import load_pba_schema, parse_numeric, validate_pba_header
 
 
 def _load_rows_csv(path):
@@ -35,7 +36,23 @@ def _load_rows_xlsx(path):
     return [[cell for cell in row] for row in workbook.active.iter_rows(values_only=True)], unit_map
 
 
-def _load_rows_xlsx_streaming(path):
+def _header_has_value(schema, header):
+    aliases = schema.get("aliases", {}) or {}
+    alias_map = {}
+    for canonical, names in aliases.items():
+        canonical_norm = normalize_alias(canonical)
+        for name in names:
+            alias_map[normalize_alias(name)] = canonical_norm
+    mapped = set()
+    for cell in header:
+        if cell is None:
+            continue
+        normalized = normalize_alias(str(cell))
+        mapped.add(alias_map.get(normalized, normalized))
+    return "current" in mapped or "value" in mapped
+
+
+def _load_rows_xlsx_streaming(path, schema):
     import openpyxl
 
     workbook = openpyxl.load_workbook(path, data_only=True, read_only=True)
@@ -48,6 +65,7 @@ def _load_rows_xlsx_streaming(path):
         header_row = None
         header_next = None
         unit_sheet = False
+        col_map = None
 
         for row in sheet.iter_rows(values_only=True):
             if row is None or not any(cell is not None for cell in row):
@@ -78,21 +96,27 @@ def _load_rows_xlsx_streaming(path):
 
             if header_next is None:
                 header_next = list(row)
-                header_norm = {normalize_alias(str(c)) for c in header if c}
-                if "current" not in header_norm and "value" not in header_norm:
+                if not _header_has_value(schema, header):
                     header = _merge_header_rows(header, header_next)
+                    col_map, unknown = validate_pba_header(schema, header)
+                    if unknown:
+                        print(f"schema info: unknown columns ignored: {', '.join(unknown)}")
                     found_data = True
                     continue
                 # Header already complete; treat this row as data.
+                col_map, unknown = validate_pba_header(schema, header)
+                if unknown:
+                    print(f"schema info: unknown columns ignored: {', '.join(unknown)}")
                 found_data = True
                 row = header_next
 
             if not found_data:
                 continue
 
-            col_map = {normalize_alias(str(name)): idx for idx, name in enumerate(header) if name}
-            if "metric" not in col_map:
-                raise ValueError("missing required column: Metric")
+            if col_map is None:
+                col_map, unknown = validate_pba_header(schema, header)
+                if unknown:
+                    print(f"schema info: unknown columns ignored: {', '.join(unknown)}")
             metric_idx = col_map.get("metric")
             if metric_idx is None or metric_idx >= len(row):
                 continue
@@ -103,7 +127,6 @@ def _load_rows_xlsx_streaming(path):
             value_idx = col_map.get("value")
             unit_idx = col_map.get("unit")
             tags_idx = col_map.get("tags")
-            tags_idx = col_map.get("tags")
             if current_idx is None and value_idx is None:
                 raise ValueError("missing required column: Current or Value")
             value = None
@@ -111,6 +134,7 @@ def _load_rows_xlsx_streaming(path):
                 value = row[current_idx]
             elif value_idx is not None and value_idx < len(row):
                 value = row[value_idx]
+            value = parse_numeric(value, "current|value", "xlsx")
             unit = None
             if unit_idx is not None and unit_idx < len(row):
                 unit = row[unit_idx]
@@ -177,6 +201,7 @@ def _merge_header_rows(primary, secondary):
 
 
 def parse(path):
+    schema = load_pba_schema()
     ext = os.path.splitext(path)[1].lower()
     if ext in [".csv"]:
         rows = _load_rows_csv(path)
@@ -192,22 +217,19 @@ def parse(path):
         header = rows[header_idx]
         if header_idx + 1 < len(rows):
             next_row = rows[header_idx + 1]
-            if header and next_row and (
-                "current" not in {normalize_alias(str(c)) for c in header if c}
-                and "value" not in {normalize_alias(str(c)) for c in header if c}
-            ):
+            if header and next_row and not _header_has_value(schema, header):
                 header = _merge_header_rows(header, next_row)
                 data_rows = rows[header_idx + 2 :]
             else:
                 data_rows = rows[header_idx + 1 :]
         else:
             data_rows = rows[header_idx + 1 :]
-        col_map = {normalize_alias(str(name)): idx for idx, name in enumerate(header) if name}
+        col_map, unknown = validate_pba_header(schema, header)
+        if unknown:
+            print(f"schema info: unknown columns ignored: {', '.join(unknown)}")
         metrics = {}
-        if "metric" not in col_map:
-            raise ValueError("missing required column: Metric")
         tags_idx = col_map.get("tags")
-        for row in data_rows:
+        for row_offset, row in enumerate(data_rows, start=header_idx + 2):
             if not row:
                 continue
             metric_idx = col_map.get("metric")
@@ -226,6 +248,7 @@ def parse(path):
                 value = row[current_idx]
             elif value_idx is not None and value_idx < len(row):
                 value = row[value_idx]
+            value = parse_numeric(value, "current|value", row_offset)
             unit = None
             if unit_idx is not None and unit_idx < len(row):
                 unit = row[unit_idx]
@@ -237,9 +260,16 @@ def parse(path):
             metrics[metric_name] = {"value": value, "unit": unit, "tags": tags}
         return metrics
 
+    for row in rows:
+        if not row:
+            continue
+        header_norm = {normalize_alias(str(c)) for c in row if c}
+        if ("current" in header_norm or "value" in header_norm) and "metric" not in header_norm:
+            raise ValueError("schema error: missing required columns: metric")
+
     # Fallback: treat as metric,value table
     metrics = {}
-    for row in rows:
+    for row_offset, row in enumerate(rows, start=1):
         if not row or len(row) < 2:
             continue
         metric_name = str(row[0]).strip()
@@ -248,14 +278,16 @@ def parse(path):
         unit = None
         if metric_name in unit_map:
             unit = unit_map[metric_name]
-        metrics[metric_name] = {"value": row[1], "unit": unit, "tags": None}
+        value = parse_numeric(row[1], "value", row_offset)
+        metrics[metric_name] = {"value": value, "unit": unit, "tags": None}
     return metrics
 
 
 def parse_stream(path):
+    schema = load_pba_schema()
     ext = os.path.splitext(path)[1].lower()
     if ext in [".xlsx", ".xlsm"]:
-        return _load_rows_xlsx_streaming(path)
+        return _load_rows_xlsx_streaming(path, schema)
     elif ext in [".csv"]:
         rows = None
         unit_map = {}
@@ -269,6 +301,9 @@ def parse_stream(path):
         for row in _load_rows_csv_streaming(path):
             if not row:
                 continue
+            header_norm = {normalize_alias(str(cell)) for cell in row if cell is not None}
+            if ("current" in header_norm or "value" in header_norm) and "metric" not in header_norm:
+                raise ValueError("schema error: missing required columns: metric")
             if header is None and any(str(cell).strip().lower() == "metric" for cell in row if cell is not None):
                 header = row
                 continue
@@ -277,19 +312,21 @@ def parse_stream(path):
 
     if header is None:
         # Fallback: metric,value rows
-        for row in _load_rows_csv_streaming(path):
+        for row_offset, row in enumerate(_load_rows_csv_streaming(path), start=1):
             if not row or len(row) < 2:
                 continue
             metric_name = str(row[0]).strip()
             if metric_name == "":
                 continue
-            metrics[metric_name] = {"value": row[1], "unit": None}
+            value = parse_numeric(row[1], "value", row_offset)
+            metrics[metric_name] = {"value": value, "unit": None, "tags": None}
         return metrics
 
-    col_map = {normalize_alias(str(name)): idx for idx, name in enumerate(header) if name}
-    if "metric" not in col_map:
-        raise ValueError("missing required column: Metric")
-    for row in data_rows:
+    col_map, unknown = validate_pba_header(schema, header)
+    if unknown:
+        print(f"schema info: unknown columns ignored: {', '.join(unknown)}")
+    tags_idx = col_map.get("tags")
+    for row_offset, row in enumerate(data_rows, start=1):
         metric_idx = col_map.get("metric")
         if metric_idx is None or metric_idx >= len(row):
             continue
@@ -307,6 +344,7 @@ def parse_stream(path):
             value = row[current_idx]
         elif value_idx is not None and value_idx < len(row):
             value = row[value_idx]
+        value = parse_numeric(value, "current|value", row_offset)
         unit = None
         if unit_idx is not None and unit_idx < len(row):
             unit = row[unit_idx]

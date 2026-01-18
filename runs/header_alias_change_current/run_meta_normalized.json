@@ -1,0 +1,23 @@
+{
+  "run_id": "header_alias_change_current",
+  "program": "harmony",
+  "subsystem": "core",
+  "test_name": "header_alias_change",
+  "environment": "lab",
+  "build": {
+    "git_sha": "abc123",
+    "build_id": "build-5-c"
+  },
+  "timestamps": {
+    "start_utc": "2026-01-01T00:06:00+00:00",
+    "end_utc": "2026-01-01T00:06:30+00:00"
+  },
+  "toolchain": {
+    "source_system": "pba_excel"
+  },
+  "operating_mode": "nominal",
+  "scenario_id": "header_alias_change",
+  "sensor_config_id": "sensor-pack-a",
+  "input_data_version": "dataset-v1",
+  "environment_fingerprint": "lab-rack-01"
+}

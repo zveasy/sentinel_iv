@@ -1,0 +1,21 @@
+dataset:
+  dataset_root: ${NASA_HTTP_TSV_ROOT:-/Users/zakariyaveasy/Downloads/nasa_http_tsv}
+  files:
+    - log_1.tsv
+    - log_2.tsv
+windows:
+  - name: early
+    start_pct: 0.19
+    duration_pct: 0.01
+    baseline: early
+    expected_status: PASS
+  - name: mid
+    start_pct: 0.295
+    duration_pct: 0.01
+    baseline: early
+    expected_status: PASS_WITH_DRIFT
+  - name: late
+    start_pct: 0.9
+    duration_pct: 0.02
+    baseline: early
+    expected_status: PASS_WITH_DRIFT

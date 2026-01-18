@@ -56,8 +56,17 @@ def write_report(report_dir, payload):
     match_fields = ", ".join(payload.get("baseline_match_fields") or [])
 
     drivers = []
-    for item in payload.get("top_drifts", []):
-        drivers.append(f"{item['metric']} ({item['delta']})")
+    for item in (payload.get("drift_attribution") or {}).get("top_drivers", [])[:3]:
+        effect = item.get("effect_size") or {}
+        if effect.get("percent") is not None:
+            effect_text = f"{round(effect['percent'], 2)}%"
+        elif effect.get("zscore") is not None:
+            effect_text = f"z={round(effect['zscore'], 2)}"
+        elif effect.get("delta") is not None:
+            effect_text = f"delta={round(effect['delta'], 4)}"
+        else:
+            effect_text = "n/a"
+        drivers.append(f"{item.get('metric_name')} {item.get('direction')} ({effect_text})")
     top_drivers = ", ".join(drivers) if drivers else "none"
 
     dist_rows = []
@@ -74,8 +83,128 @@ def write_report(report_dir, payload):
         )
     dist_table = "\n".join(dist_rows) if dist_rows else "<tr><td colspan=\"6\">none</td></tr>"
 
+    attribution_rows = []
+    top_attribution = (payload.get("drift_attribution") or {}).get("top_drivers", [])[:5]
+    for item in top_attribution:
+        effect = item.get("effect_size") or {}
+        parts = []
+        if effect.get("percent") is not None:
+            parts.append(f"{round(effect['percent'], 2)}%")
+        if effect.get("zscore") is not None:
+            parts.append(f"z={round(effect['zscore'], 2)}")
+        if effect.get("ks") is not None:
+            parts.append(f"ks={round(effect['ks'], 3)}")
+        if not parts and effect.get("delta") is not None:
+            parts.append(f"delta={round(effect['delta'], 4)}")
+        effect_text = ", ".join(parts) if parts else "n/a"
+
+        baseline_stats = item.get("baseline_stats") or {}
+        current_stats = item.get("current_stats") or {}
+        baseline_text = (
+            f"mean={baseline_stats.get('mean')} med={baseline_stats.get('median')} p95={baseline_stats.get('p95')}"
+        )
+        current_text = (
+            f"mean={current_stats.get('mean')} med={current_stats.get('median')} p95={current_stats.get('p95')}"
+        )
+
+        onset = item.get("onset") or {}
+        onset_text = "Onset (approx): n/a"
+        if onset.get("sustained_index") is not None:
+            onset_text = f"Onset (approx): idx ~{onset.get('sustained_index')} (p={onset.get('persistence')})"
+        elif onset.get("first_exceed_index") is not None:
+            onset_text = f"Onset (approx): idx ~{onset.get('first_exceed_index')} (p={onset.get('persistence')})"
+
+        sources = item.get("raw_features") or []
+        corr_items = item.get("raw_feature_correlations") or []
+        corr_text = ""
+        if corr_items:
+            corr_text = "; ".join(
+                f"{entry['feature']} corr={round(entry['corr'], 3) if entry['corr'] is not None else 'n/a'}"
+                for entry in corr_items
+            )
+        sources_text = ", ".join(sources) if sources else "aggregate(metric-only)"
+        if corr_text:
+            sources_text = f"{sources_text} ({corr_text})"
+        elif item.get("correlation_note"):
+            sources_text = f"{sources_text} ({item.get('correlation_note')})"
+
+        evidence = item.get("evidence") or []
+        evidence_rows = []
+        for row in evidence:
+            evidence_rows.append(
+                "<tr>"
+                f"<td>{row.get('index')}</td>"
+                f"<td>{row.get('value')}</td>"
+                f"<td>{row.get('drift_score')}</td>"
+                "</tr>"
+            )
+        evidence_table = (
+            "<table><thead><tr><th>Idx</th><th>Value</th><th>Score</th></tr></thead>"
+            f"<tbody>{''.join(evidence_rows)}</tbody></table>"
+            if evidence_rows
+            else "n/a"
+        )
+        if not evidence_rows:
+            baseline_median = baseline_stats.get("median")
+            current_median = current_stats.get("median")
+            if baseline_median is not None and current_median is not None:
+                evidence_table = f"baseline median={baseline_median} -> current median={current_median}"
+
+        decision_basis = ", ".join(item.get("decision_basis") or []) or "n/a"
+        attribution_rows.append(
+            "<tr>"
+            f"<td>{item.get('metric_name')}</td>"
+            f"<td>{item.get('direction')}</td>"
+            f"<td>{effect_text}</td>"
+            f"<td>{baseline_text}</td>"
+            f"<td>{current_text}</td>"
+            f"<td>{onset_text}</td>"
+            f"<td>{sources_text}</td>"
+            f"<td>{decision_basis}</td>"
+            f"<td>{evidence_table}</td>"
+            "</tr>"
+        )
+    attribution_table = (
+        "\n".join(attribution_rows)
+        if attribution_rows
+        else "<tr><td colspan=\"9\">none</td></tr>"
+    )
+
     baseline_warning = payload.get("baseline_warning")
     mismatch_expected = "yes" if payload.get("context_mismatch_expected") else "no"
+    decision_basis = payload.get("decision_basis") or {}
+    decision_basis_line = "n/a"
+    if decision_basis:
+        decision_basis_line = (
+            f"score={decision_basis.get('drift_score')} "
+            f"warn={decision_basis.get('warn_threshold')} "
+            f"fail={decision_basis.get('fail_threshold')} "
+            f"persistence={decision_basis.get('persistence_cycles')} "
+            f"type={decision_basis.get('score_type')}"
+        )
+    why_line = None
+    if payload.get("status") and (payload.get("drift_attribution") or {}).get("top_drivers"):
+        driver = (payload.get("drift_attribution") or {}).get("top_drivers", [])[0]
+        effect = driver.get("effect_size") or {}
+        basis = decision_basis or {}
+        delta = effect.get("delta")
+        percent = effect.get("percent")
+        warn = basis.get("warn_threshold")
+        persistence = basis.get("persistence_cycles")
+        parts = []
+        metric_name = driver.get("metric_name")
+        if metric_name:
+            parts.append(metric_name.replace("_", " "))
+        if percent is not None:
+            parts.append(f"increased by {round(percent, 2)}%")
+        if delta is not None:
+            parts.append(f"({round(delta, 4)})")
+        if warn is not None:
+            parts.append(f"exceeding warn threshold {warn}")
+        if persistence is not None:
+            parts.append(f"for {persistence} consecutive cycles")
+        if parts:
+            why_line = "Why: " + " ".join(parts) + "."
 
     html_doc = f"""<!doctype html>
 <html lang="en">
@@ -104,6 +233,9 @@ def write_report(report_dir, payload):
   <div>Context Mismatch Expected: {mismatch_expected}</div>
   <div>Baseline Warning: {baseline_warning or 'none'}</div>
   <div>Top Drivers: {top_drivers}</div>
+  <div>Decision Basis: {decision_basis_line}</div>
+  <div>{why_line or 'Why: n/a'}</div>
+  <div>Likely Investigation Areas: {", ".join(payload.get("likely_investigation_areas") or []) or "none"}</div>
   <h2>Drift Metrics</h2>
   <table>
     <thead>
@@ -140,6 +272,27 @@ def write_report(report_dir, payload):
       {dist_table}
     </tbody>
   </table>
+  <h2>Drift Attribution</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Direction</th>
+        <th>Effect</th>
+        <th>Baseline Stats</th>
+        <th>Current Stats</th>
+        <th>Onset</th>
+        <th>Sources</th>
+        <th>Decision</th>
+        <th>Evidence</th>
+      </tr>
+    </thead>
+    <tbody>
+      {attribution_table}
+    </tbody>
+  </table>
+  <div>Legend: DRIFT = exceeds warn, below fail; FAIL = exceeds fail with persistence.</div>
+  <div>Drift attribution is statistical, not causal.</div>
 </body>
 </html>
 """

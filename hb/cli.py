@@ -10,11 +10,12 @@ import yaml
 
 from hb import engine
 from hb.adapters import (
-    pba_excel_adapter,
     cmapss_fd001,
     cmapss_fd002,
     cmapss_fd003,
     cmapss_fd004,
+    nasa_http_tsv,
+    pba_excel_adapter,
 )
 from hb.io import read_json, write_json, write_metrics_csv
 from hb.registry import (
@@ -98,6 +99,7 @@ def ingest(args):
         "cmapss_fd002": cmapss_fd002,
         "cmapss_fd003": cmapss_fd003,
         "cmapss_fd004": cmapss_fd004,
+        "nasa_http_tsv": nasa_http_tsv,
     }
     if args.source not in adapter_map:
         raise HBError(f"unknown source adapter: {args.source}", EXIT_CONFIG)
@@ -171,6 +173,7 @@ def analyze(args):
         fail_metrics,
         invariant_violations,
         distribution_drifts,
+        drift_attribution,
     ) = engine.compare_metrics(
         metrics_current, baseline_metrics, registry, distribution_enabled=distribution_enabled
     )
@@ -186,6 +189,50 @@ def analyze(args):
             policy_path=redaction_policy, run_meta=copy.deepcopy(run_meta)
         )
 
+    decision_basis = None
+    if drift_attribution:
+        top_driver = drift_attribution[0]
+        decision_basis = {
+            "drift_score": top_driver.get("drift_score"),
+            "warn_threshold": top_driver.get("warn_threshold"),
+            "fail_threshold": top_driver.get("fail_threshold"),
+            "persistence_cycles": top_driver.get("persistence_cycles"),
+            "score_type": top_driver.get("score_type"),
+        }
+
+    likely_areas = []
+    driver_metrics = [item.get("metric_name", "") for item in drift_attribution]
+    for metric_name in driver_metrics:
+        name = (metric_name or "").lower()
+        if "latency" in name or "lag" in name:
+            likely_areas.extend(
+                [
+                    "runtime scheduling",
+                    "request queuing",
+                    "downstream service latency",
+                    "resource saturation",
+                ]
+            )
+        if "error" in name or "failure" in name or "reset" in name:
+            likely_areas.extend(
+                [
+                    "transport reliability",
+                    "schema validation",
+                    "upstream failures",
+                    "retries/timeouts",
+                ]
+            )
+        if "throughput" in name or "rate" in name or "qps" in name:
+            likely_areas.extend(
+                [
+                    "backpressure",
+                    "rate limits",
+                    "queue depth",
+                    "ingest contention",
+                ]
+            )
+    likely_areas = sorted({area for area in likely_areas}) if likely_areas else []
+
     report_payload = {
         "run_id": report_meta["run_id"],
         "status": status,
@@ -200,6 +247,9 @@ def analyze(args):
         "drift_metrics": drift_metrics,
         "top_drifts": drift_metrics[: args.top],
         "distribution_drifts": distribution_drifts,
+        "drift_attribution": {"top_drivers": drift_attribution},
+        "likely_investigation_areas": likely_areas,
+        "decision_basis": decision_basis,
         "warnings": warnings,
         "fail_metrics": fail_metrics,
         "invariant_violations": invariant_violations,

@@ -1,0 +1,25 @@
+source: nasa_http_tsv
+format: tsv
+header: true
+allow_extra_columns: true
+required_columns:
+  - host
+  - time
+  - method
+  - url
+  - response
+  - bytes
+optional_columns:
+  - logname
+  - referer
+  - useragent
+types:
+  host: str
+  time: int
+  method: str
+  url: str
+  response: int
+  bytes: int
+  logname: str
+  referer: str
+  useragent: str

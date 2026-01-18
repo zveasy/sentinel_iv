@@ -1,0 +1,7 @@
+metric,value,unit,tags
+avg_latency_ms,10.0,ms,"{""samples"":[14,15,16,15,14,15,16,15]}"
+error_code_frequency,0.01,,
+max_latency_ms,20.0,ms,
+missed_deadlines,0.0,,
+reset_count,0.0,,
+watchdog_triggers,0.0,,

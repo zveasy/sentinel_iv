@@ -55,6 +55,41 @@ metrics:
     drift_percent: 20.0
     min_effect: 0.005
     invariant_max: 0.1
+  http_error_rate:
+    aliases:
+      - HTTP Error Rate
+      - HTTP Error Frequency
+    drift_threshold: 0.02
+    drift_percent: 20.0
+    min_effect: 0.005
+    source_columns:
+      - status_code
+  smap_msl_mean:
+    aliases:
+      - SMAP/MSL Mean
+    drift_threshold: 0.1
+    drift_percent: 10.0
+    min_effect: 0.01
+    source_columns:
+      - value
+  smap_msl_std:
+    aliases:
+      - SMAP/MSL Std
+    drift_threshold: 0.1
+    drift_percent: 10.0
+    min_effect: 0.01
+    source_columns:
+      - value
+  smap_msl_value_dist:
+    aliases:
+      - SMAP/MSL Value Dist
+    drift_threshold: 0.1
+    drift_percent: 10.0
+    min_effect: 0.01
+    distribution_drift:
+      ks_threshold: 0.1
+    source_columns:
+      - value
   missed_deadlines:
     aliases:
       - Missed Deadlines

@@ -262,6 +262,22 @@ python tests/real_data/cmapss_fd002/run_regression.py
 python tests/real_data/cmapss_fd003/run_regression.py
 python tests/real_data/cmapss_fd004/run_regression.py
 ```
+NASA HTTP TSV regression (local dataset):
+```
+export NASA_HTTP_TSV_ROOT=/Users/zakariyaveasy/Downloads/nasa_http_tsv
+python tests/real_data/nasa_http_tsv/run_regression.py
+```
+Expected: early window PASS; mid/late windows PASS_WITH_DRIFT.
+SMAP/MSL regression (local dataset):
+```
+export SMAP_MSL_ROOT=/Users/zakariyaveasy/Downloads/labeled_anomalies
+python tests/real_data/smap_msl/run_regression.py
+```
+Expected: baseline windows PASS; anomaly windows PASS_WITH_DRIFT.
+SMAP/MSL manifest regeneration:
+```
+python tools/smap_msl_make_manifest.py --root /Users/zakariyaveasy/Downloads/labeled_anomalies --output tests/real_data/smap_msl/manifest.yaml
+```
 CMAPSS auto-tune helper (dry-run by default):
 ```
 export CMAPSS_ROOT=/Users/zakariyaveasy/Downloads/CMAPSSData
@@ -312,6 +328,12 @@ DoD lab offline + secure install:
 Tests:
 ```
 pytest -q
+```
+
+Sample cases quick-run (baseline + current for every case, then open reports):
+```
+chmod +x tools/run_sample_cases.sh
+tools/run_sample_cases.sh
 ```
 
 ## MVP Acceptance Criteria

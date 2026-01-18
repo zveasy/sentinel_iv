@@ -1,0 +1,23 @@
+{
+  "run_id": "reset_triggered_fail_current",
+  "program": "harmony",
+  "subsystem": "core",
+  "test_name": "reset_triggered_fail",
+  "environment": "lab",
+  "build": {
+    "git_sha": "abc123",
+    "build_id": "build-3-c"
+  },
+  "timestamps": {
+    "start_utc": "2026-01-01T00:04:00+00:00",
+    "end_utc": "2026-01-01T00:04:30+00:00"
+  },
+  "toolchain": {
+    "source_system": "pba_excel"
+  },
+  "operating_mode": "nominal",
+  "scenario_id": "reset_triggered_fail",
+  "sensor_config_id": "sensor-pack-a",
+  "input_data_version": "dataset-v1",
+  "environment_fingerprint": "lab-rack-01"
+}

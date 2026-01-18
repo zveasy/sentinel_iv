@@ -74,6 +74,143 @@ def _extract_samples(metric):
     return cleaned or None
 
 
+def _percentile(sorted_values, pct):
+    if not sorted_values:
+        return None
+    if len(sorted_values) == 1:
+        return float(sorted_values[0])
+    rank = (len(sorted_values) - 1) * pct
+    low = int(rank)
+    high = min(low + 1, len(sorted_values) - 1)
+    weight = rank - low
+    return float(sorted_values[low] * (1 - weight) + sorted_values[high] * weight)
+
+
+def _stats_from_samples(samples, fallback_value):
+    if samples:
+        values = sorted(samples)
+        count = len(values)
+        mean = sum(values) / count
+        median = _percentile(values, 0.5)
+        p95 = _percentile(values, 0.95)
+        variance = sum((value - mean) ** 2 for value in values) / count
+        std = variance ** 0.5
+        return {
+            "mean": mean,
+            "median": median,
+            "p95": p95,
+            "std": std,
+            "count": count,
+        }
+    if fallback_value is None:
+        return {"mean": None, "median": None, "p95": None, "std": None, "count": 0}
+    return {
+        "mean": fallback_value,
+        "median": fallback_value,
+        "p95": fallback_value,
+        "std": 0.0,
+        "count": 1,
+    }
+
+
+def _confidence_from_count(count):
+    if count >= 200:
+        return "high"
+    if count >= 50:
+        return "medium"
+    if count > 0:
+        return "low"
+    return None
+
+
+def _pearson_corr(values, scores):
+    if not values or not scores or len(values) != len(scores):
+        return None
+    n = len(values)
+    if n < 2:
+        return None
+    mean_x = sum(values) / n
+    mean_y = sum(scores) / n
+    num = sum((x - mean_x) * (y - mean_y) for x, y in zip(values, scores))
+    den_x = sum((x - mean_x) ** 2 for x in values) ** 0.5
+    den_y = sum((y - mean_y) ** 2 for y in scores) ** 0.5
+    if den_x == 0 or den_y == 0:
+        return None
+    return num / (den_x * den_y)
+
+
+def _exceeds_threshold(delta, baseline_mean, drift_threshold, drift_percent, zscore):
+    if drift_threshold is not None:
+        return abs(delta) >= drift_threshold
+    if drift_percent is not None and baseline_mean not in (None, 0):
+        return abs(delta / baseline_mean * 100.0) >= drift_percent
+    if zscore is not None:
+        return abs(zscore) >= 3.0
+    return False
+
+
+def _onset_and_evidence(samples, baseline_stats, config):
+    if not samples:
+        return None, None, None
+    baseline_mean = baseline_stats.get("mean")
+    baseline_std = baseline_stats.get("std")
+    drift_threshold = config.get("drift_threshold")
+    drift_percent = config.get("drift_percent")
+    persistence = int(config.get("drift_persistence", 5))
+
+    drift_scores = []
+    exceeds = []
+    for value in samples:
+        delta = value - baseline_mean if baseline_mean is not None else None
+        zscore = None
+        if baseline_std and baseline_std > 0 and delta is not None:
+            zscore = delta / baseline_std
+        drift_score = zscore if zscore is not None else delta
+        drift_scores.append(drift_score)
+        exceeds.append(_exceeds_threshold(delta or 0, baseline_mean, drift_threshold, drift_percent, zscore))
+
+    first_exceed = None
+    for idx, flag in enumerate(exceeds):
+        if flag:
+            first_exceed = idx
+            break
+
+    sustained = None
+    streak = 0
+    for idx, flag in enumerate(exceeds):
+        if flag:
+            streak += 1
+            if streak >= persistence:
+                sustained = idx - persistence + 1
+                break
+        else:
+            streak = 0
+
+    onset = {
+        "first_exceed_index": first_exceed,
+        "sustained_index": sustained,
+        "persistence": persistence,
+    }
+
+    evidence = []
+    onset_idx = sustained if sustained is not None else first_exceed
+    if onset_idx is not None:
+        start = max(0, onset_idx - 3)
+        end = min(len(samples), onset_idx + 4)
+    else:
+        start = 0
+        end = min(len(samples), 7)
+    for idx in range(start, end):
+        evidence.append(
+            {
+                "index": idx,
+                "value": samples[idx],
+                "drift_score": drift_scores[idx],
+            }
+        )
+    return onset, evidence, drift_scores
+
+
 def _ks_statistic(sample_a, sample_b):
     a = sorted(sample_a)
     b = sorted(sample_b)
@@ -101,6 +238,7 @@ def compare_metrics(current, baseline, metric_registry, distribution_enabled=Tru
     fail = []
     invariant_violations = []
     distribution_drifts = []
+    attribution = []
     all_metrics = sorted(set(current.keys()) | set(baseline.keys()))
     for metric in all_metrics:
         config = metric_registry["metrics"].get(metric, {})
@@ -194,6 +332,102 @@ def compare_metrics(current, baseline, metric_registry, distribution_enabled=Tru
                         }
                     )
 
+        base_samples = _extract_samples(base)
+        cur_samples = _extract_samples(cur)
+        baseline_stats = _stats_from_samples(base_samples, base["value"])
+        current_stats = _stats_from_samples(cur_samples, cur["value"])
+        baseline_std = baseline_stats.get("std")
+        zscore = None
+        if baseline_std and baseline_std > 0:
+            zscore = delta / baseline_std
+        onset, evidence, drift_scores = _onset_and_evidence(cur_samples, baseline_stats, config)
+
+        decision_basis = []
+        if is_drift:
+            if drift_threshold is not None:
+                decision_basis.append("drift_threshold")
+            if drift_percent is not None:
+                decision_basis.append("drift_percent")
+        if metric in fail:
+            decision_basis.append("critical")
+
+        driver_score = None
+        if zscore is not None:
+            driver_score = abs(zscore)
+        elif percent is not None:
+            driver_score = abs(percent)
+        else:
+            driver_score = abs(delta)
+
+        raw_features = config.get("source_columns") or []
+        if isinstance(raw_features, str):
+            raw_features = [raw_features]
+        raw_feature_correlations = []
+        corr_method = "pearson"
+        n_points_used = len(cur_samples) if cur_samples else 0
+        min_abs_corr_display = 0.30
+        correlation_note = None
+        if cur_samples and drift_scores:
+            corr = _pearson_corr(cur_samples, drift_scores)
+            if corr is not None and abs(corr) >= min_abs_corr_display:
+                for feature in raw_features or ["value"]:
+                    raw_feature_correlations.append({"feature": feature, "corr": corr})
+            else:
+                correlation_note = "low attribution confidence"
+
+        flagged = is_drift or metric in fail
+        if drift_threshold is not None:
+            warn_threshold = drift_threshold
+        elif drift_percent is not None:
+            warn_threshold = drift_percent
+        else:
+            warn_threshold = None
+        score_type = "delta"
+        if zscore is not None:
+            score_type = "zscore"
+        elif percent is not None:
+            score_type = "percent"
+        attribution.append(
+            {
+                "metric_name": metric,
+                "direction": "up" if delta >= 0 else "down",
+                "effect_size": {
+                    "delta": delta,
+                    "percent": percent,
+                    "zscore": zscore,
+                },
+                "baseline_stats": {
+                    "mean": baseline_stats.get("mean"),
+                    "median": baseline_stats.get("median"),
+                    "p95": baseline_stats.get("p95"),
+                },
+                "current_stats": {
+                    "mean": current_stats.get("mean"),
+                    "median": current_stats.get("median"),
+                    "p95": current_stats.get("p95"),
+                },
+                "confidence": _confidence_from_count(
+                    min(baseline_stats.get("count", 0), current_stats.get("count", 0))
+                ),
+                "onset": onset,
+                "raw_features": raw_features,
+                "raw_feature_correlations": raw_feature_correlations or None,
+                "corr_method": corr_method,
+                "n_points_used": n_points_used,
+                "min_abs_corr_display": min_abs_corr_display,
+                "correlation_note": correlation_note,
+                "evidence": evidence,
+                "decision_basis": decision_basis,
+                "score": driver_score,
+                "drift_score": driver_score,
+                "warn_threshold": warn_threshold,
+                "fail_threshold": config.get("fail_threshold"),
+                "persistence_cycles": int(config.get("drift_persistence", 5)),
+                "score_type": score_type,
+                "flagged": flagged,
+            }
+        )
+
     if fail:
         status = "FAIL"
     elif drift or distribution_drifts:
@@ -202,4 +436,22 @@ def compare_metrics(current, baseline, metric_registry, distribution_enabled=Tru
         status = "PASS"
 
     drift_sorted = sorted(drift, key=lambda item: abs(item["delta"]), reverse=True)
-    return status, drift_sorted, warnings, fail, invariant_violations, distribution_drifts
+    attribution_map = {item["metric_name"]: item for item in attribution}
+    for item in distribution_drifts:
+        entry = attribution_map.get(item["metric"])
+        if entry:
+            entry["effect_size"]["ks"] = item.get("statistic")
+            entry["decision_basis"].append("distribution_ks")
+            if entry.get("score") is None and item.get("statistic") is not None:
+                entry["score"] = abs(item["statistic"])
+    for item in attribution:
+        if item.get("score") is None:
+            item["score"] = 0.0
+    flagged_metrics = {item["metric"] for item in distribution_drifts}
+    filtered = [
+        item
+        for item in attribution
+        if item.get("flagged") or item.get("metric_name") in flagged_metrics
+    ]
+    top_drivers = sorted(filtered, key=lambda item: abs(item.get("score", 0.0)), reverse=True)
+    return status, drift_sorted, warnings, fail, invariant_violations, distribution_drifts, top_drivers

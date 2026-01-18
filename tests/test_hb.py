@@ -1,7 +1,9 @@
 import json
 import os
 import time
+import io
 from argparse import Namespace
+from contextlib import redirect_stdout
 
 import pytest
 
@@ -79,6 +81,9 @@ def test_cases(tmp_path, case_name):
 
     expected = _load_expected(case_name)
     assert report["status"] == expected["status"]
+    if report["status"] != "PASS":
+        attribution = report.get("drift_attribution", {}).get("top_drivers", [])
+        assert attribution, "expected drift attribution when status != PASS"
 
     if "drift_metrics_count" in expected:
         assert len(report["drift_metrics"]) == expected["drift_metrics_count"]
@@ -116,6 +121,97 @@ def test_streaming_benchmark_threshold():
     pba_excel_adapter.parse_stream(bench_file)
     elapsed = time.time() - start
     assert elapsed <= max_seconds, f"streaming took {elapsed:.3f}s, max {max_seconds}s"
+
+
+def test_schema_unknown_columns_warn(tmp_path):
+    data = "Metric,Current,Extra\navg_latency_ms,10,foo\n"
+    csv_path = tmp_path / "unknown_cols.csv"
+    csv_path.write_text(data)
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        metrics = pba_excel_adapter.parse(str(csv_path))
+    output = buf.getvalue()
+    assert "unknown columns ignored" in output
+    assert "avg_latency_ms" in metrics
+
+
+def test_schema_missing_required_fails(tmp_path):
+    data = "Current\n10\n"
+    csv_path = tmp_path / "missing_required.csv"
+    csv_path.write_text(data)
+    with pytest.raises(ValueError, match="missing required columns"):
+        pba_excel_adapter.parse(str(csv_path))
+
+
+def test_schema_alias_column(tmp_path, monkeypatch):
+    schema = (
+        "source: pba_excel\n"
+        "allow_extra_columns: true\n"
+        "required_columns:\n"
+        "  - metric\n"
+        "optional_columns:\n"
+        "  - current\n"
+        "either_current_or_value: true\n"
+        "aliases:\n"
+        "  current: [CurrentValue]\n"
+    )
+    schema_path = tmp_path / "pba_schema.yaml"
+    schema_path.write_text(schema)
+    monkeypatch.setenv("HB_SCHEMA_PBA_EXCEL", str(schema_path))
+
+    data = "Metric,CurrentValue\navg_latency_ms,10\n"
+    csv_path = tmp_path / "alias_cols.csv"
+    csv_path.write_text(data)
+    metrics = pba_excel_adapter.parse(str(csv_path))
+    assert "avg_latency_ms" in metrics
+
+
+def test_schema_alias_with_unknown_columns_warns(tmp_path, monkeypatch):
+    schema = (
+        "source: pba_excel\n"
+        "allow_extra_columns: true\n"
+        "required_columns:\n"
+        "  - metric\n"
+        "optional_columns:\n"
+        "  - current\n"
+        "either_current_or_value: true\n"
+        "aliases:\n"
+        "  current: [CurrentValue]\n"
+    )
+    schema_path = tmp_path / "pba_schema.yaml"
+    schema_path.write_text(schema)
+    monkeypatch.setenv("HB_SCHEMA_PBA_EXCEL", str(schema_path))
+
+    data = "Metric,CurrentValue,ExtraCol\navg_latency_ms,10,ignored\n"
+    csv_path = tmp_path / "alias_unknown.csv"
+    csv_path.write_text(data)
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        metrics = pba_excel_adapter.parse(str(csv_path))
+    output = buf.getvalue()
+    assert "unknown columns ignored" in output
+    assert "avg_latency_ms" in metrics
+
+
+def test_schema_disallow_extra_columns_fails(tmp_path, monkeypatch):
+    schema = (
+        "source: pba_excel\n"
+        "allow_extra_columns: false\n"
+        "required_columns:\n"
+        "  - metric\n"
+        "optional_columns:\n"
+        "  - current\n"
+        "either_current_or_value: true\n"
+    )
+    schema_path = tmp_path / "pba_schema.yaml"
+    schema_path.write_text(schema)
+    monkeypatch.setenv("HB_SCHEMA_PBA_EXCEL", str(schema_path))
+
+    data = "Metric,Current,ExtraCol\navg_latency_ms,10,ignored\n"
+    csv_path = tmp_path / "extra_cols.csv"
+    csv_path.write_text(data)
+    with pytest.raises(ValueError, match="unknown columns"):
+        pba_excel_adapter.parse(str(csv_path))
 
 
 def test_baseline_request_approve_flow(tmp_path):

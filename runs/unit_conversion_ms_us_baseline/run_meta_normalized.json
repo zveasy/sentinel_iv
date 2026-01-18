@@ -1,0 +1,23 @@
+{
+  "run_id": "unit_conversion_ms_us_baseline",
+  "program": "harmony",
+  "subsystem": "core",
+  "test_name": "unit_conversion_ms_us",
+  "environment": "lab",
+  "build": {
+    "git_sha": "abc123",
+    "build_id": "build-6-b"
+  },
+  "timestamps": {
+    "start_utc": "2026-01-01T00:06:00+00:00",
+    "end_utc": "2026-01-01T00:06:30+00:00"
+  },
+  "toolchain": {
+    "source_system": "pba_excel"
+  },
+  "operating_mode": "nominal",
+  "scenario_id": "unit_conversion_ms_us",
+  "sensor_config_id": "sensor-pack-a",
+  "input_data_version": "dataset-v1",
+  "environment_fingerprint": "lab-rack-01"
+}
