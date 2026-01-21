@@ -17,6 +17,7 @@ from hb.adapters import (
     cmapss_fd002,
     cmapss_fd003,
     cmapss_fd004,
+    custom_tabular,
     nasa_http_tsv,
     pba_excel_adapter,
     smap_msl_adapter,
@@ -105,6 +106,7 @@ def ingest(args):
         "cmapss_fd004": cmapss_fd004,
         "nasa_http_tsv": nasa_http_tsv,
         "smap_msl": smap_msl_adapter,
+        "custom_tabular": custom_tabular,
     }
     if args.source not in adapter_map:
         raise HBError(f"unknown source adapter: {args.source}", EXIT_CONFIG)

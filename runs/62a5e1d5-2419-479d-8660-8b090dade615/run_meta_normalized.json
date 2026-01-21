@@ -1,0 +1,23 @@
+{
+  "program": "local_ui",
+  "subsystem": "nasa_http_tsv",
+  "test_name": "default",
+  "scenario_id": "default",
+  "operating_mode": "default",
+  "environment": "local",
+  "environment_fingerprint": "local",
+  "sensor_config_id": "default",
+  "input_data_version": "1",
+  "run_id": "62a5e1d5-2419-479d-8660-8b090dade615",
+  "toolchain": {
+    "source_system": "nasa_http_tsv"
+  },
+  "build": {
+    "git_sha": "",
+    "build_id": ""
+  },
+  "timestamps": {
+    "start_utc": "",
+    "end_utc": ""
+  }
+}
