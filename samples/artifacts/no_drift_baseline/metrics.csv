@@ -1,0 +1,5 @@
+metric,value,unit,tags
+avg_latency_ms,10,ms,
+max_latency_ms,20,ms,
+reset_count,0,,
+watchdog_triggers,0,,

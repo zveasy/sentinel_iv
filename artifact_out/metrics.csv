@@ -1,0 +1,8 @@
+metric,value,unit,tags
+error_count,2,,
+warn_count,1,,
+reset_count,0,,
+total_lines,4,,
+template_match_rate,0.0,,
+new_template_count,4,,
+known_template_count,4,,

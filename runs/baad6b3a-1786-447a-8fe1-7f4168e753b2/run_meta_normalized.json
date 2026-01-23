@@ -1,0 +1,23 @@
+{
+  "program": "local_ui",
+  "subsystem": "pba_excel",
+  "test_name": "default",
+  "scenario_id": "default",
+  "operating_mode": "default",
+  "environment": "local",
+  "environment_fingerprint": "local",
+  "sensor_config_id": "default",
+  "input_data_version": "1",
+  "run_id": "baad6b3a-1786-447a-8fe1-7f4168e753b2",
+  "toolchain": {
+    "source_system": "custom_tabular"
+  },
+  "build": {
+    "git_sha": "",
+    "build_id": ""
+  },
+  "timestamps": {
+    "start_utc": "",
+    "end_utc": ""
+  }
+}

@@ -1,0 +1,11 @@
+asserts:
+  - id: latency_under_20
+    metric: avg_latency_ms
+    op: "<"
+    value: 20
+    severity: fail
+  - id: reset_count_zero
+    metric: reset_count
+    op: "=="
+    value: 0
+    severity: fail

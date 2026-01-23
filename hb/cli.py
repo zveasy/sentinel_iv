@@ -12,6 +12,10 @@ from hb import engine
 from hb import feedback
 from hb import local_ui
 from hb import watch
+from hb_core.compare import run_compare
+from hb_core.adapters import VxWorksLogAdapter
+from hb.config import load_baseline_policy, load_metric_registry
+from hb_core.plan import run_plan
 from hb.adapters import (
     cmapss_fd001,
     cmapss_fd002,
@@ -48,13 +52,6 @@ from hb.security import load_key, sign_file, verify_signature, encrypt_file
 from hb.redaction import apply_redaction
 
 
-def load_metric_registry(path):
-    with open(path, "r") as f:
-        registry = yaml.safe_load(f)
-    registry["alias_index"] = build_alias_index(registry)
-    return registry
-
-
 def file_hash(path):
     hasher = hashlib.sha256()
     with open(path, "rb") as f:
@@ -75,11 +72,11 @@ EXIT_PARSE = 2
 EXIT_CONFIG = 3
 EXIT_REGISTRY = 4
 
+PLAN_EXIT_PASS_WITH_DRIFT = 1
+PLAN_EXIT_FAIL = 2
+PLAN_EXIT_NO_TEST = 3
 
-def load_baseline_policy(path):
-    with open(path, "r") as f:
-        payload = yaml.safe_load(f)
-    return payload.get("baseline_policy", payload)
+
 
 
 def generate_run_id(run_meta):
@@ -626,7 +623,39 @@ def main():
     verify_parser.add_argument("--sign-key", required=False)
 
     ui_parser = subparsers.add_parser("ui", help="run local web UI (localhost only)")
-    ui_parser.add_argument("--port", type=int, default=int(os.environ.get("HB_UI_PORT", 8890)))
+    ui_parser.add_argument("--port", type=int, default=int(os.environ.get("HB_UI_PORT", 8765)))
+
+    compare_parser = subparsers.add_parser("compare", help="compare baseline and run artifacts")
+    compare_parser.add_argument("--baseline", required=True, help="path to baseline artifact")
+    compare_parser.add_argument("--run", required=True, help="path to run artifact")
+    compare_parser.add_argument("--out", required=True, help="output directory")
+    compare_parser.add_argument("--schema-mode", choices=["auto", "file", "none"], default="auto")
+    compare_parser.add_argument("--schema-path", default=None, help="schema path when using --schema-mode file")
+    compare_parser.add_argument("--thresholds-path", default=None, help="thresholds/baseline policy path")
+    compare_parser.add_argument("--run-meta", default=None, help="run meta JSON (applies to both)")
+    compare_parser.add_argument("--source", default=None, help="override source adapter (e.g., pba_excel)")
+
+    plan_parser = subparsers.add_parser("plan", help="plan runner")
+    plan_sub = plan_parser.add_subparsers(dest="plan_cmd", required=True)
+    plan_run_cmd = plan_sub.add_parser("run", help="run a plan YAML")
+    plan_run_cmd.add_argument("plan_path")
+    plan_run_cmd.add_argument("--out", default="plan_output")
+    plan_run_cmd.add_argument("--metric-registry", default=None)
+    plan_run_cmd.add_argument("--baseline-policy", default=None)
+    plan_run_cmd.add_argument("--asserts-dir", default=None)
+
+    bundle_parser = subparsers.add_parser("bundle", help="bundle results into a zip")
+    bundle_parser.add_argument("results_dir")
+    bundle_parser.add_argument("--out", default=None)
+
+    adapter_parser = subparsers.add_parser("adapter", help="adapter utilities")
+    adapter_sub = adapter_parser.add_subparsers(dest="adapter_cmd", required=True)
+    vxworks_cmd = adapter_sub.add_parser("vxworks", help="export VxWorks log to artifact_dir")
+    vxworks_cmd.add_argument("--log", required=True, help="path to VxWorks log")
+    vxworks_cmd.add_argument("--out", required=True, help="output artifact_dir")
+    vxworks_cmd.add_argument("--baseline-log", default=None, help="baseline log for profile inference")
+    vxworks_cmd.add_argument("--profile", default=None, help="existing parser_profile.json")
+    vxworks_cmd.add_argument("--run-meta", default=None, help="run_meta.json override")
 
     watch_parser = subparsers.add_parser("watch", help="watch a folder and run drift checks")
     watch_parser.add_argument("--dir", required=True, help="directory to watch")
@@ -736,7 +765,122 @@ def main():
         elif args.command == "verify":
             verify_report(args)
         elif args.command == "ui":
-            local_ui.serve_local_ui(port=args.port)
+            if os.environ.get("HB_UI_LEGACY") == "1":
+                host = os.environ.get("HB_UI_HOST", "127.0.0.1")
+                local_ui.serve_local_ui(port=args.port, host=host)
+            else:
+                try:
+                    import importlib.util
+
+                    def _ui_deps_missing():
+                        missing = []
+                        if importlib.util.find_spec("fastapi") is None:
+                            missing.append("fastapi")
+                        if importlib.util.find_spec("uvicorn") is None:
+                            missing.append("uvicorn")
+                        if importlib.util.find_spec("multipart") is None:
+                            missing.append("python-multipart")
+                        return missing
+
+                    missing = _ui_deps_missing()
+                    if missing and os.environ.get("HB_UI_NO_AUTO_INSTALL") != "1":
+                        req_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "requirements.txt"))
+                        print(f"installing UI deps: {', '.join(missing)}")
+                        subprocess.run(
+                            [sys.executable, "-m", "pip", "install", "-r", req_path],
+                            check=True,
+                        )
+                        missing = _ui_deps_missing()
+                    if missing:
+                        raise RuntimeError("python-multipart is required for file uploads")
+                    from app import server as app_server
+
+                    host = os.environ.get("HB_UI_HOST", "127.0.0.1")
+                    app_server.run(host=host, port=args.port)
+                except Exception as exc:
+                    message = str(exc)
+                    if "multipart" in message.lower():
+                        print(
+                            "error: python-multipart is required for the FastAPI UI. "
+                            "Install with: pip install python-multipart",
+                            file=sys.stderr,
+                        )
+                        print("falling back to legacy UI (set HB_UI_LEGACY=1 to force).")
+                        host = os.environ.get("HB_UI_HOST", "127.0.0.1")
+                        local_ui.serve_local_ui(port=args.port, host=host)
+                    else:
+                        raise
+        elif args.command == "compare":
+            run_meta = None
+            if args.run_meta:
+                run_meta = read_json(args.run_meta)
+            if args.source:
+                if run_meta is None:
+                    run_meta = {}
+                run_meta.setdefault("toolchain", {})["source_system"] = args.source
+            schema_mode = None if args.schema_mode == "none" else args.schema_mode
+            result = run_compare(
+                baseline_path=args.baseline,
+                run_path=args.run,
+                out_dir=args.out,
+                schema_mode=schema_mode,
+                schema_path=args.schema_path,
+                thresholds_path=args.thresholds_path,
+                run_meta=run_meta,
+            )
+            print(f"compare status: {result.status}")
+            print(f"report: {result.report_path}")
+        elif args.command == "plan":
+            if args.metric_registry is None:
+                args.metric_registry = parser.get_default("metric_registry")
+            if args.baseline_policy is None:
+                args.baseline_policy = parser.get_default("baseline_policy")
+            payload = run_plan(
+                plan_path=args.plan_path,
+                out_dir=args.out,
+                metric_registry=args.metric_registry,
+                baseline_policy=args.baseline_policy,
+                asserts_dir=args.asserts_dir,
+            )
+            statuses = [item["status"] for item in payload.get("scenarios", [])]
+            overall = "PASS"
+            if any(status == "FAIL" for status in statuses):
+                overall = "FAIL"
+            elif any(status == "PASS_WITH_DRIFT" for status in statuses):
+                overall = "PASS_WITH_DRIFT"
+            elif any(status == "NO_TEST" for status in statuses):
+                overall = "NO_TEST"
+            print(f"plan status: {overall}")
+            if overall == "PASS":
+                sys.exit(EXIT_OK)
+            if overall == "PASS_WITH_DRIFT":
+                sys.exit(PLAN_EXIT_PASS_WITH_DRIFT)
+            if overall == "FAIL":
+                sys.exit(PLAN_EXIT_FAIL)
+            sys.exit(PLAN_EXIT_NO_TEST)
+        elif args.command == "bundle":
+            import zipfile
+
+            results_dir = args.results_dir
+            out_path = args.out or (results_dir.rstrip(os.sep) + ".zip")
+            with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for root, _, files in os.walk(results_dir):
+                    for name in files:
+                        full_path = os.path.join(root, name)
+                        rel_path = os.path.relpath(full_path, results_dir)
+                        zf.write(full_path, rel_path)
+            print(f"bundle written: {out_path}")
+        elif args.command == "adapter":
+            if args.adapter_cmd == "vxworks":
+                adapter = VxWorksLogAdapter()
+                adapter.export(
+                    log_path=args.log,
+                    out_dir=args.out,
+                    baseline_log_path=args.baseline_log,
+                    profile_path=args.profile,
+                    run_meta=args.run_meta,
+                )
+                print(f"adapter output: {args.out}")
         elif args.command == "watch":
             watch.run_watch(
                 watch_dir=args.dir,

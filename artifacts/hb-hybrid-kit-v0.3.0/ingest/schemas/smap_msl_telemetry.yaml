@@ -1,0 +1,13 @@
+source: smap_msl_telemetry
+format: csv
+header: true
+allow_extra_columns: true
+required_columns:
+  - value
+optional_columns:
+  - index
+  - timestamp
+types:
+  value: float
+  index: int
+  timestamp: str

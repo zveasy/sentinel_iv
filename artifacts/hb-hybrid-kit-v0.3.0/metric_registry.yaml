@@ -1,0 +1,111 @@
+metrics:
+  avg_latency_ms:
+    aliases:
+      - Avg Task Latency (ms)
+      - Avg Latency (ms)
+      - Avg Latency
+    drift_threshold: 1.0
+    drift_percent: 10.0
+    min_effect: 0.5
+    unit: ms
+    unit_map:
+      ms: 1
+      us: 0.001
+      s: 1000
+    invariant_max: 50
+    distribution_drift:
+      ks_threshold: 0.2
+  max_latency_ms:
+    aliases:
+      - Max Task Latency (ms)
+      - Max Latency (ms)
+      - Max Latency
+    drift_threshold: 5.0
+    drift_percent: 15.0
+    min_effect: 1.0
+    unit: ms
+    unit_map:
+      ms: 1
+      us: 0.001
+      s: 1000
+    invariant_max: 100
+    distribution_drift:
+      ks_threshold: 0.2
+  reset_count:
+    aliases:
+      - Reset Count
+      - Resets
+    drift_threshold: 1
+    critical: true
+    fail_threshold: 0
+    invariant_eq: 0
+  watchdog_triggers:
+    aliases:
+      - Watchdog Triggers
+      - Watchdog Count
+    drift_threshold: 1
+    critical: true
+    fail_threshold: 0
+    invariant_eq: 0
+  error_code_frequency:
+    aliases:
+      - Error Code Frequency
+      - Error Rate
+    drift_threshold: 0.05
+    drift_percent: 20.0
+    min_effect: 0.005
+    invariant_max: 0.1
+  http_error_rate:
+    aliases:
+      - HTTP Error Rate
+      - HTTP Error Frequency
+    drift_threshold: 0.02
+    drift_percent: 20.0
+    min_effect: 0.005
+    source_columns:
+      - status_code
+  smap_msl_mean:
+    aliases:
+      - SMAP/MSL Mean
+    drift_threshold: 0.1
+    drift_percent: 10.0
+    min_effect: 0.01
+    source_columns:
+      - value
+  smap_msl_std:
+    aliases:
+      - SMAP/MSL Std
+    drift_threshold: 0.1
+    drift_percent: 10.0
+    min_effect: 0.01
+    source_columns:
+      - value
+  smap_msl_value_dist:
+    aliases:
+      - SMAP/MSL Value Dist
+    drift_threshold: 0.1
+    drift_percent: 10.0
+    min_effect: 0.01
+    distribution_drift:
+      ks_threshold: 0.1
+    source_columns:
+      - value
+  missed_deadlines:
+    aliases:
+      - Missed Deadlines
+      - Deadline Misses
+    drift_threshold: 1
+    invariant_max: 0
+  cmapss_sensor_mean:
+    aliases:
+      - CMAPSS Sensor Mean
+    drift_threshold: 0.1
+    drift_percent: 5.0
+    min_effect: 0.01
+  cmapss_sensor_std:
+    aliases:
+      - CMAPSS Sensor Std
+    drift_threshold: 0.1
+    drift_percent: 5.0
+    min_effect: 0.01
+    invariant_min: 2463.5

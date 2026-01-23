@@ -112,6 +112,100 @@ bin/hb ui
 ```
 Then open `http://127.0.0.1:8890/` and follow the on‑screen steps.
 
+## Harmony Bridge Hybrid Eval Kit (HB-HEK-0.3)
+
+Hybrid = CLI + local UI, one codepath. This is a local-only “website experience” shipped as a zip for evals.
+
+What you ship:
+- CLI for power users + CI
+- Local Web UI for “let me try this in 2 minutes”
+- Same core engine underneath (single compare API)
+
+Folder layout (what the customer receives):
+```
+harmony-bridge-hybrid-kit-v0.3/
+├── VERSION
+├── README.md
+├── QUICKSTART.md
+├── LICENSE_EVAL.txt
+├── bin/
+│   ├── hb               # CLI entry
+│   └── hb-ui            # starts local web UI (or hb ui)
+├── app/
+│   ├── server.py        # local web server (FastAPI/Flask)
+│   ├── templates/       # UI HTML (or static build)
+│   └── static/          # css/js
+├── hb_core/
+│   ├── ingest/
+│   ├── schema/
+│   ├── compare/
+│   ├── scoring/
+│   └── report/
+├── config/
+│   └── thresholds.yaml
+├── examples/
+│   ├── baseline/
+│   ├── run_ok/
+│   └── run_drift/
+└── output/
+    └── (empty)
+```
+
+User experience:
+- CLI flow:
+```
+./bin/hb compare --baseline ./examples/baseline --run ./examples/run_ok --out ./output
+open ./output/drift_report.html
+```
+- Local “website” flow:
+```
+./bin/hb ui
+# opens http://127.0.0.1:8765
+```
+
+UI: Compare page (minimal but strong)
+- Baseline: file/folder picker
+- Run: file/folder picker
+- Format: CSV / JSON autodetected
+- Schema: Auto / Upload schema.yaml
+- Output directory: default `./output/<timestamp>/`
+- Button: Run Compare
+- Result: status pill (PASS / YELLOW / FAIL) + “Open Report”
+
+Optional: History page
+- Recent runs list
+- Open report
+- Download `summary.json`
+
+Single core API (CLI + UI call this):
+```
+result = hb_core.compare.run_compare(
+    baseline_path=...,
+    run_path=...,
+    out_dir=...,
+    schema_mode="auto" | "file",
+    schema_path=...,
+    thresholds_path=...
+)
+```
+
+Local-only web UI posture (verbatim for README/QUICKSTART):
+```
+## Local-Only Web UI
+
+The Harmony Bridge UI runs on your machine at:
+http://127.0.0.1:8765
+
+- The server binds to localhost only (not accessible externally).
+- No data is uploaded anywhere.
+- No telemetry or analytics are included.
+- All artifacts are written to your selected output directory.
+```
+
+Packaging roadmap:
+- Phase 1 (ship now): Python-based kit, `./bin/hb ui` starts local server, deps via `pip install -r requirements.txt`.
+- Phase 2 (better UX): PyInstaller builds `hb` and `hb-ui` binaries (no Python needed).
+
 Developer Setup:
 ```
 python -m venv .venv

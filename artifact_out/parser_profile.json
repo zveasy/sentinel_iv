@@ -1,0 +1,17 @@
+{
+  "timestamp_style": "iso",
+  "severity_tokens": [
+    "WARN",
+    "INFO",
+    "ERROR"
+  ],
+  "prefixes": [
+    "2026-01-01T00"
+  ],
+  "templates": [
+    "<int>-<int>-01T00:<int>:01Z NET: link down on <id> code=<int>",
+    "<int>-<int>-01T00:<int>:02Z WARN NET: link down on <id> code=<int>",
+    "<int>-<int>-01T00:<int>:03Z INFO SYS: boot complete",
+    "<int>-<int>-01T00:<int>:04Z ERROR WATCHDOG: timeout task=main"
+  ]
+}

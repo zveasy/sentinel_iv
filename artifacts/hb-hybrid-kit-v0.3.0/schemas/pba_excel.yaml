@@ -1,0 +1,25 @@
+source: pba_excel
+allow_extra_columns: true
+required_columns:
+  - metric
+optional_columns:
+  - baseline
+  - current
+  - value
+  - delta
+  - threshold
+  - unit
+  - status
+  - tags
+either_current_or_value: true
+aliases: {}
+types:
+  metric: str
+  baseline: float
+  current: float
+  value: float
+  delta: float
+  threshold: float
+  unit: str
+  status: str
+  tags: str
