@@ -1,0 +1,2 @@
+{"ts_utc": "2026-01-24T16:43:45Z", "plan_id": "example_plan", "scenario_id": "no_drift_case", "status": "PASS", "drift_score": null}
+{"ts_utc": "2026-01-24T17:01:42Z", "plan_id": "example_plan", "scenario_id": "no_drift_case", "status": "PASS", "drift_score": null}

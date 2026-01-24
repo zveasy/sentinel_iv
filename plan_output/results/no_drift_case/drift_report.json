@@ -1,0 +1,52 @@
+{
+  "run_id": "no_drift_run",
+  "status": "PASS",
+  "baseline_run_id": "no_drift_baseline",
+  "hb_version": "dev",
+  "source_type": "pba_excel",
+  "baseline_reason": "plan_baseline",
+  "baseline_warning": null,
+  "baseline_match_level": "plan",
+  "baseline_match_fields": [],
+  "baseline_match_score": null,
+  "baseline_match_possible": null,
+  "context_mismatch_expected": false,
+  "drift_metrics": [],
+  "top_drifts": [],
+  "distribution_drifts": [],
+  "drift_attribution": {
+    "top_drivers": []
+  },
+  "warnings": [
+    "missing current metric: cmapss_sensor_mean",
+    "missing current metric: cmapss_sensor_std",
+    "missing current metric: error_code_frequency",
+    "missing current metric: http_error_rate",
+    "missing current metric: missed_deadlines",
+    "missing current metric: smap_msl_mean",
+    "missing current metric: smap_msl_std",
+    "missing current metric: smap_msl_value_dist"
+  ],
+  "fail_metrics": [],
+  "invariant_violations": [],
+  "assert_results": [
+    {
+      "id": "latency_under_20",
+      "metric": "avg_latency_ms",
+      "op": "<",
+      "expected": 20,
+      "actual": 10.0,
+      "severity": "fail",
+      "status": "PASS"
+    },
+    {
+      "id": "reset_count_zero",
+      "metric": "reset_count",
+      "op": "==",
+      "expected": 0,
+      "actual": 0.0,
+      "severity": "fail",
+      "status": "PASS"
+    }
+  ]
+}

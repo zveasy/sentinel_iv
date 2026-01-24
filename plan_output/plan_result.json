@@ -1,0 +1,62 @@
+{
+  "plan_id": "example_plan",
+  "scenarios": [
+    {
+      "scenario_id": "no_drift_case",
+      "status": "PASS",
+      "report_json": "plan_output/results/no_drift_case/drift_report.json",
+      "report_html": "plan_output/results/no_drift_case/drift_report.html",
+      "asserts": [
+        {
+          "id": "latency_under_20",
+          "metric": "avg_latency_ms",
+          "op": "<",
+          "expected": 20,
+          "actual": 10.0,
+          "severity": "fail",
+          "status": "PASS"
+        },
+        {
+          "id": "reset_count_zero",
+          "metric": "reset_count",
+          "op": "==",
+          "expected": 0,
+          "actual": 0.0,
+          "severity": "fail",
+          "status": "PASS"
+        }
+      ],
+      "run_meta": {
+        "schema_version": "1.0",
+        "run_id": "no_drift_run",
+        "program": "demo",
+        "subsystem": "demo_subsystem",
+        "test_name": "no_drift_case",
+        "toolchain": {
+          "source_system": "pba_excel"
+        },
+        "timestamps": {
+          "start_utc": "2026-01-02T00:00:00Z",
+          "end_utc": "2026-01-02T00:01:00Z"
+        }
+      },
+      "baseline_meta": {
+        "schema_version": "1.0",
+        "run_id": "no_drift_baseline",
+        "program": "demo",
+        "subsystem": "demo_subsystem",
+        "test_name": "no_drift_case",
+        "toolchain": {
+          "source_system": "pba_excel"
+        },
+        "timestamps": {
+          "start_utc": "2026-01-01T00:00:00Z",
+          "end_utc": "2026-01-01T00:01:00Z"
+        }
+      }
+    }
+  ],
+  "trace_matrix_json": "plan_output/trace_matrix.json",
+  "trace_matrix_csv": "plan_output/trace_matrix.csv",
+  "trend_json": "plan_output/trend.json"
+}

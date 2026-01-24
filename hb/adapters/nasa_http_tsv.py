@@ -1,3 +1,5 @@
+import csv
+import json
 import os
 
 import pandas as pd
@@ -17,6 +19,40 @@ def _collect_paths(path):
             raise ValueError(f"SCHEMA_ERROR: no .tsv files found in {path}")
         return candidates
     return [path]
+
+
+def _profile_path_from_env(key):
+    value = os.environ.get(key)
+    if not value:
+        return None
+    if os.path.isdir(value):
+        return os.path.join(value, "baseline_profile.json")
+    return value
+
+
+def _load_profile():
+    path = _profile_path_from_env("HB_BASELINE_PROFILE_IN")
+    if not path or not os.path.exists(path):
+        return None
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def _save_profile(profile):
+    path = _profile_path_from_env("HB_BASELINE_PROFILE_OUT")
+    if not path:
+        return None
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(profile, f, indent=2)
+    return path
+
+
+def _open_tsv(path, encoding=None):
+    try:
+        return open(path, "r", encoding=encoding or "utf-8", errors="replace")
+    except UnicodeDecodeError:
+        return open(path, "r", encoding="latin1", errors="replace")
 
 
 def _build_column_map(columns, schema):
@@ -71,6 +107,17 @@ def _coerce_required_str(series, field):
     if invalid:
         return None, True
     return cleaned, False
+
+
+def _metrics_from_counts(total, error_count):
+    error_rate = error_count / total if total else 0.0
+    return {
+        "http_error_rate": {
+            "value": error_rate,
+            "unit": None,
+            "tags": None,
+        }
+    }
 
 
 def load_events(path):
@@ -153,3 +200,53 @@ def metrics_from_events(events):
 def parse(path):
     events = load_events(path)
     return metrics_from_events(events)
+
+
+def parse_stream(path):
+    schema = load_nasa_http_tsv_schema()
+    profile = _load_profile()
+    delimiter = "\t"
+    total = 0
+    error_count = 0
+    column_map = None
+
+    for file_path in _collect_paths(path):
+        with _open_tsv(file_path, encoding=(profile or {}).get("encoding")) as f:
+            reader = csv.DictReader(f, delimiter=delimiter)
+            if not reader.fieldnames:
+                raise ValueError(f"SCHEMA_ERROR: no header row in {file_path}")
+            if profile and profile.get("column_map"):
+                column_map = profile["column_map"]
+            if column_map is None:
+                column_map, extras, allow_extra = _build_column_map(reader.fieldnames, schema)
+                if extras and allow_extra:
+                    print(f"schema warning: extra columns ignored: {', '.join(extras)}")
+            missing = [key for key in ["host", "method", "url", "time", "response", "bytes"] if key not in column_map]
+            if missing:
+                raise ValueError(f"SCHEMA_ERROR: missing required columns: {', '.join(missing)}")
+            for row in reader:
+                total += 1
+                try:
+                    status_code = int(row[column_map["response"]])
+                except (TypeError, ValueError):
+                    raise ValueError("SCHEMA_ERROR: invalid response values")
+                if status_code >= 400:
+                    error_count += 1
+
+    if total == 0:
+        raise ValueError("SCHEMA_ERROR: no rows found")
+
+    if profile is None:
+        profile = {
+            "schema_version": "1.0",
+            "delimiter": delimiter,
+            "encoding": "utf-8",
+            "column_map": column_map,
+            "total_rows": total,
+            "error_count": error_count,
+            "metric_ids": {"http_error_rate": 0},
+            "metrics_summary": {"http_error_rate": {"count": total, "mean": error_count / total}},
+        }
+        _save_profile(profile)
+
+    return _metrics_from_counts(total, error_count)

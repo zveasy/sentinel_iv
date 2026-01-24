@@ -1,0 +1,14 @@
+{
+  "no_drift_case": [
+    {
+      "ts_utc": "2026-01-24T16:43:45Z",
+      "status": "PASS",
+      "drift_score": null
+    },
+    {
+      "ts_utc": "2026-01-24T17:01:42Z",
+      "status": "PASS",
+      "drift_score": null
+    }
+  ]
+}

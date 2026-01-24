@@ -10,6 +10,7 @@ import pandas as pd
 import yaml
 
 from hb.schema import load_schema
+from hb.perf import PerfRecorder
 
 
 @dataclass
@@ -199,6 +200,7 @@ def run_compare(
     schema_path,
     thresholds_path,
     run_meta=None,
+    baseline_profile_path=None,
 ):
     out_dir = os.path.abspath(out_dir)
     _ensure_dirs(out_dir)
@@ -206,6 +208,24 @@ def run_compare(
     _ensure_dirs(os.path.join(out_dir, "reports"))
     _ensure_dirs(os.path.join(out_dir, "logs"))
 
+    perf = PerfRecorder()
+    def _file_meta(label, path):
+        ext = os.path.splitext(path)[1].lower()
+        rows = None
+        if ext in {".csv", ".tsv"}:
+            try:
+                with open(path, "r", errors="replace") as f:
+                    rows = max(sum(1 for _ in f) - 1, 0)
+            except OSError:
+                rows = None
+        return {
+            f"{label}_bytes": os.path.getsize(path) if os.path.exists(path) else None,
+            f"{label}_rows": rows,
+            f"{label}_file_type": ext.lstrip("."),
+        }
+
+    perf.add_meta(**_file_meta("baseline", baseline_path))
+    perf.add_meta(**_file_meta("run", run_path))
     source = _resolve_source(run_meta, schema_mode)
     baseline_meta_path, current_meta_path = _resolve_run_meta(run_meta, source, out_dir)
 
@@ -241,8 +261,21 @@ def run_compare(
             encrypt_key=None,
             sign_key=None,
             redaction_policy=None,
+            perf=perf,
         )
-        cli.run(baseline_args)
+        if baseline_profile_path:
+            baseline_profile_out = None
+        else:
+            baseline_profile_out = os.path.join(baseline_args.out, "baseline_profile.json")
+        if baseline_profile_out:
+            os.environ["HB_BASELINE_PROFILE_OUT"] = baseline_profile_out
+            os.environ["HB_STREAM_INGEST"] = "1"
+        with perf.span("ingest_baseline"):
+            cli.run(baseline_args)
+        if "HB_BASELINE_PROFILE_OUT" in os.environ:
+            del os.environ["HB_BASELINE_PROFILE_OUT"]
+        if "HB_STREAM_INGEST" in os.environ:
+            del os.environ["HB_STREAM_INGEST"]
 
         current_args = cli.argparse.Namespace(
             source=source,
@@ -259,8 +292,20 @@ def run_compare(
             encrypt_key=None,
             sign_key=None,
             redaction_policy=None,
+            perf=perf,
         )
-        report_dir = cli.run(current_args)
+        baseline_profile_in = baseline_profile_path or os.path.join(
+            baseline_args.out, "baseline_profile.json"
+        )
+        if baseline_profile_in and os.path.exists(baseline_profile_in):
+            os.environ["HB_BASELINE_PROFILE_IN"] = baseline_profile_in
+            os.environ["HB_STREAM_INGEST"] = "1"
+        with perf.span("ingest_run"):
+            report_dir = cli.run(current_args)
+        if "HB_BASELINE_PROFILE_IN" in os.environ:
+            del os.environ["HB_BASELINE_PROFILE_IN"]
+        if "HB_STREAM_INGEST" in os.environ:
+            del os.environ["HB_STREAM_INGEST"]
     finally:
         if previous_schema:
             os.environ["HB_CUSTOM_SCHEMA_PATH"] = previous_schema
@@ -286,6 +331,8 @@ def run_compare(
     }
     with open(summary_path, "w") as f:
         json.dump(summary_payload, f, indent=2)
+
+    perf.write(os.path.join(out_dir, "perf.json"))
 
     decision_basis = report.get("decision_basis") or {}
     return CompareResult(

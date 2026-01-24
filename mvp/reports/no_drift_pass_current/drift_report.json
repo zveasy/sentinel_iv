@@ -2,10 +2,33 @@
   "run_id": "no_drift_pass_current",
   "status": "PASS",
   "baseline_run_id": "no_drift_pass_current",
+  "hb_version": "dev",
+  "source_type": "pba_excel",
   "baseline_reason": "last_pass",
-  "baseline_warning": null,
+  "baseline_warning": "context mismatch: matched 1/6",
+  "baseline_match_level": "MED",
+  "baseline_match_fields": [
+    "environment"
+  ],
+  "baseline_match_score": 1,
+  "baseline_match_possible": 6,
+  "context_mismatch_expected": true,
   "drift_metrics": [],
   "top_drifts": [],
-  "warnings": [],
-  "fail_metrics": []
+  "distribution_drifts": [],
+  "drift_attribution": {
+    "top_drivers": []
+  },
+  "likely_investigation_areas": [],
+  "decision_basis": null,
+  "warnings": [
+    "missing current metric: cmapss_sensor_mean",
+    "missing current metric: cmapss_sensor_std",
+    "missing current metric: http_error_rate",
+    "missing current metric: smap_msl_mean",
+    "missing current metric: smap_msl_std",
+    "missing current metric: smap_msl_value_dist"
+  ],
+  "fail_metrics": [],
+  "invariant_violations": []
 }

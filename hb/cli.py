@@ -14,7 +14,8 @@ from hb import local_ui
 from hb import watch
 from hb_core.compare import run_compare
 from hb_core.adapters import VxWorksLogAdapter
-from hb.config import load_baseline_policy, load_metric_registry
+from hb.config import load_baseline_policy, load_compare_plan, load_metric_registry
+from hb.perf import PerfRecorder
 from hb_core.plan import run_plan
 from hb.adapters import (
     cmapss_fd001,
@@ -108,16 +109,28 @@ def ingest(args):
     if args.source not in adapter_map:
         raise HBError(f"unknown source adapter: {args.source}", EXIT_CONFIG)
 
+    perf = getattr(args, "perf", None)
     run_meta = read_json(args.run_meta) if args.run_meta else {}
     run_meta = normalize_run_meta(run_meta, args.source)
     run_id = run_meta["run_id"]
 
     adapter = adapter_map[args.source]
-    if getattr(args, "stream", False) and hasattr(adapter, "parse_stream"):
-        metrics_raw = adapter.parse_stream(args.path)
+    use_stream = getattr(args, "stream", False) or os.environ.get("HB_STREAM_INGEST") == "1"
+    if perf is None:
+        if use_stream and hasattr(adapter, "parse_stream"):
+            metrics_raw = adapter.parse_stream(args.path)
+        else:
+            metrics_raw = adapter.parse(args.path)
     else:
-        metrics_raw = adapter.parse(args.path)
+        with perf.span("ingest_run"):
+            if use_stream and hasattr(adapter, "parse_stream"):
+                metrics_raw = adapter.parse_stream(args.path)
+            else:
+                metrics_raw = adapter.parse(args.path)
     registry = load_metric_registry(args.metric_registry)
+    compare_plan = load_compare_plan(args.metric_registry)
+    deterministic = os.environ.get("HB_DETERMINISTIC", "0") == "1"
+    early_exit = os.environ.get("HB_EARLY_EXIT", "0") == "1"
     metrics_normalized, warnings = engine.normalize_metrics(metrics_raw, registry)
 
     out_dir = args.out or os.path.join("runs", run_id)
@@ -141,17 +154,40 @@ def ingest(args):
         write_json(os.path.join(out_dir, "ingest_warnings.json"), {"warnings": warnings})
 
     print(f"ingest output: {out_dir}")
+    if perf is not None:
+        file_ext = os.path.splitext(args.path)[1].lower()
+        row_count = None
+        if file_ext in {".csv", ".tsv"}:
+            try:
+                with open(args.path, "r", errors="replace") as f:
+                    row_count = max(sum(1 for _ in f) - 1, 0)
+            except OSError:
+                row_count = None
+        perf.add_meta(
+            ingest_source=args.path,
+            ingest_bytes=os.path.getsize(args.path) if os.path.exists(args.path) else None,
+            ingest_metrics=len(metrics_normalized),
+            ingest_rows=row_count,
+            ingest_file_type=file_ext.lstrip("."),
+        )
     return out_dir
 
 
 def analyze(args):
     run_dir = args.run
+    perf = getattr(args, "perf", None)
+    if perf is None:
+        perf = PerfRecorder()
     run_meta = read_json(os.path.join(run_dir, "run_meta_normalized.json"))
     registry = load_metric_registry(args.metric_registry)
+    with perf.span("compile_plan"):
+        compare_plan = load_compare_plan(args.metric_registry)
     policy = load_baseline_policy(args.baseline_policy)
     registry_hash = file_hash(args.metric_registry)
     redaction_policy = args.redaction_policy
     distribution_enabled = policy.get("distribution_drift_enabled", True)
+    deterministic = os.environ.get("HB_DETERMINISTIC", "0") == "1"
+    early_exit = os.environ.get("HB_EARLY_EXIT", "0") == "1"
 
     conn = init_db(args.db)
     baseline_run_id, baseline_reason, baseline_warning, baseline_match = select_baseline(
@@ -162,25 +198,33 @@ def analyze(args):
     else:
         baseline_metrics = {}
 
+    metrics_path = os.path.join(run_dir, "metrics_normalized.csv")
     metrics_current = {}
-    for row in _read_metrics_csv(os.path.join(run_dir, "metrics_normalized.csv")):
+    for row in _read_metrics_csv(metrics_path):
         metrics_current[row["metric"]] = {
             "value": float(row["value"]) if row["value"] != "" else None,
             "unit": row.get("unit") or None,
             "tags": row.get("tags") or None,
         }
 
-    (
-        status,
-        drift_metrics,
-        warnings,
-        fail_metrics,
-        invariant_violations,
-        distribution_drifts,
-        drift_attribution,
-    ) = engine.compare_metrics(
-        metrics_current, baseline_metrics, registry, distribution_enabled=distribution_enabled
-    )
+    with perf.span("compare_core"):
+        (
+            status,
+            drift_metrics,
+            warnings,
+            fail_metrics,
+            invariant_violations,
+            distribution_drifts,
+            drift_attribution,
+        ) = engine.compare_metrics(
+            metrics_current,
+            baseline_metrics,
+            registry,
+            distribution_enabled=distribution_enabled,
+            plan=compare_plan,
+            early_exit=early_exit,
+            deterministic=deterministic,
+        )
     context_mismatch_expected = bool(
         baseline_warning and str(baseline_warning).startswith("context mismatch")
     )
@@ -262,7 +306,8 @@ def analyze(args):
     }
 
     report_dir = os.path.join(args.reports, report_meta["run_id"])
-    json_path, html_path = write_report(report_dir, report_payload)
+    with perf.span("render_report"):
+        json_path, html_path = write_report(report_dir, report_payload)
     if getattr(args, "pdf", False):
         pdf_path = os.path.join(report_dir, "drift_report.pdf")
         _, error = write_pdf(html_path, pdf_path)
@@ -327,10 +372,20 @@ def analyze(args):
     write_metrics_csv(os.path.join(report_dir, "metrics_normalized.csv"), _metrics_to_rows(metrics_current))
 
     print(f"report output: {report_dir}")
+    perf.add_meta(
+        metrics_count=len(metrics_current),
+        metrics_bytes=os.path.getsize(metrics_path) if os.path.exists(metrics_path) else None,
+        baseline_run_id=baseline_run_id,
+    )
+    perf.write(os.path.join(report_dir, "perf.json"))
     return report_dir
 
 
 def run(args):
+    perf = getattr(args, "perf", None)
+    if perf is None:
+        perf = PerfRecorder()
+    args.perf = perf
     run_dir = ingest(args)
     analyze_args = argparse.Namespace(
         run=run_dir,
@@ -343,6 +398,7 @@ def run(args):
         encrypt_key=args.encrypt_key,
         sign_key=args.sign_key,
         redaction_policy=args.redaction_policy,
+        perf=perf,
     )
     report_dir = analyze(analyze_args)
     print(f"run output: {report_dir}")

@@ -13,6 +13,10 @@ from hb import feedback
 from hb import local_ui
 from hb import watch
 from hb_core.compare import run_compare
+from hb_core.adapters import VxWorksLogAdapter
+from hb.config import load_baseline_policy, load_compare_plan, load_metric_registry
+from hb.perf import PerfRecorder
+from hb_core.plan import run_plan
 from hb.adapters import (
     cmapss_fd001,
     cmapss_fd002,
@@ -49,13 +53,6 @@ from hb.security import load_key, sign_file, verify_signature, encrypt_file
 from hb.redaction import apply_redaction
 
 
-def load_metric_registry(path):
-    with open(path, "r") as f:
-        registry = yaml.safe_load(f)
-    registry["alias_index"] = build_alias_index(registry)
-    return registry
-
-
 def file_hash(path):
     hasher = hashlib.sha256()
     with open(path, "rb") as f:
@@ -76,11 +73,11 @@ EXIT_PARSE = 2
 EXIT_CONFIG = 3
 EXIT_REGISTRY = 4
 
+PLAN_EXIT_PASS_WITH_DRIFT = 1
+PLAN_EXIT_FAIL = 2
+PLAN_EXIT_NO_TEST = 3
 
-def load_baseline_policy(path):
-    with open(path, "r") as f:
-        payload = yaml.safe_load(f)
-    return payload.get("baseline_policy", payload)
+
 
 
 def generate_run_id(run_meta):
@@ -112,16 +109,28 @@ def ingest(args):
     if args.source not in adapter_map:
         raise HBError(f"unknown source adapter: {args.source}", EXIT_CONFIG)
 
+    perf = getattr(args, "perf", None)
     run_meta = read_json(args.run_meta) if args.run_meta else {}
     run_meta = normalize_run_meta(run_meta, args.source)
     run_id = run_meta["run_id"]
 
     adapter = adapter_map[args.source]
-    if getattr(args, "stream", False) and hasattr(adapter, "parse_stream"):
-        metrics_raw = adapter.parse_stream(args.path)
+    use_stream = getattr(args, "stream", False) or os.environ.get("HB_STREAM_INGEST") == "1"
+    if perf is None:
+        if use_stream and hasattr(adapter, "parse_stream"):
+            metrics_raw = adapter.parse_stream(args.path)
+        else:
+            metrics_raw = adapter.parse(args.path)
     else:
-        metrics_raw = adapter.parse(args.path)
+        with perf.span("ingest_run"):
+            if use_stream and hasattr(adapter, "parse_stream"):
+                metrics_raw = adapter.parse_stream(args.path)
+            else:
+                metrics_raw = adapter.parse(args.path)
     registry = load_metric_registry(args.metric_registry)
+    compare_plan = load_compare_plan(args.metric_registry)
+    deterministic = os.environ.get("HB_DETERMINISTIC", "0") == "1"
+    early_exit = os.environ.get("HB_EARLY_EXIT", "0") == "1"
     metrics_normalized, warnings = engine.normalize_metrics(metrics_raw, registry)
 
     out_dir = args.out or os.path.join("runs", run_id)
@@ -145,17 +154,40 @@ def ingest(args):
         write_json(os.path.join(out_dir, "ingest_warnings.json"), {"warnings": warnings})
 
     print(f"ingest output: {out_dir}")
+    if perf is not None:
+        file_ext = os.path.splitext(args.path)[1].lower()
+        row_count = None
+        if file_ext in {".csv", ".tsv"}:
+            try:
+                with open(args.path, "r", errors="replace") as f:
+                    row_count = max(sum(1 for _ in f) - 1, 0)
+            except OSError:
+                row_count = None
+        perf.add_meta(
+            ingest_source=args.path,
+            ingest_bytes=os.path.getsize(args.path) if os.path.exists(args.path) else None,
+            ingest_metrics=len(metrics_normalized),
+            ingest_rows=row_count,
+            ingest_file_type=file_ext.lstrip("."),
+        )
     return out_dir
 
 
 def analyze(args):
     run_dir = args.run
+    perf = getattr(args, "perf", None)
+    if perf is None:
+        perf = PerfRecorder()
     run_meta = read_json(os.path.join(run_dir, "run_meta_normalized.json"))
     registry = load_metric_registry(args.metric_registry)
+    with perf.span("compile_plan"):
+        compare_plan = load_compare_plan(args.metric_registry)
     policy = load_baseline_policy(args.baseline_policy)
     registry_hash = file_hash(args.metric_registry)
     redaction_policy = args.redaction_policy
     distribution_enabled = policy.get("distribution_drift_enabled", True)
+    deterministic = os.environ.get("HB_DETERMINISTIC", "0") == "1"
+    early_exit = os.environ.get("HB_EARLY_EXIT", "0") == "1"
 
     conn = init_db(args.db)
     baseline_run_id, baseline_reason, baseline_warning, baseline_match = select_baseline(
@@ -166,25 +198,33 @@ def analyze(args):
     else:
         baseline_metrics = {}
 
+    metrics_path = os.path.join(run_dir, "metrics_normalized.csv")
     metrics_current = {}
-    for row in _read_metrics_csv(os.path.join(run_dir, "metrics_normalized.csv")):
+    for row in _read_metrics_csv(metrics_path):
         metrics_current[row["metric"]] = {
             "value": float(row["value"]) if row["value"] != "" else None,
             "unit": row.get("unit") or None,
             "tags": row.get("tags") or None,
         }
 
-    (
-        status,
-        drift_metrics,
-        warnings,
-        fail_metrics,
-        invariant_violations,
-        distribution_drifts,
-        drift_attribution,
-    ) = engine.compare_metrics(
-        metrics_current, baseline_metrics, registry, distribution_enabled=distribution_enabled
-    )
+    with perf.span("compare_core"):
+        (
+            status,
+            drift_metrics,
+            warnings,
+            fail_metrics,
+            invariant_violations,
+            distribution_drifts,
+            drift_attribution,
+        ) = engine.compare_metrics(
+            metrics_current,
+            baseline_metrics,
+            registry,
+            distribution_enabled=distribution_enabled,
+            plan=compare_plan,
+            early_exit=early_exit,
+            deterministic=deterministic,
+        )
     context_mismatch_expected = bool(
         baseline_warning and str(baseline_warning).startswith("context mismatch")
     )
@@ -266,7 +306,8 @@ def analyze(args):
     }
 
     report_dir = os.path.join(args.reports, report_meta["run_id"])
-    json_path, html_path = write_report(report_dir, report_payload)
+    with perf.span("render_report"):
+        json_path, html_path = write_report(report_dir, report_payload)
     if getattr(args, "pdf", False):
         pdf_path = os.path.join(report_dir, "drift_report.pdf")
         _, error = write_pdf(html_path, pdf_path)
@@ -331,10 +372,20 @@ def analyze(args):
     write_metrics_csv(os.path.join(report_dir, "metrics_normalized.csv"), _metrics_to_rows(metrics_current))
 
     print(f"report output: {report_dir}")
+    perf.add_meta(
+        metrics_count=len(metrics_current),
+        metrics_bytes=os.path.getsize(metrics_path) if os.path.exists(metrics_path) else None,
+        baseline_run_id=baseline_run_id,
+    )
+    perf.write(os.path.join(report_dir, "perf.json"))
     return report_dir
 
 
 def run(args):
+    perf = getattr(args, "perf", None)
+    if perf is None:
+        perf = PerfRecorder()
+    args.perf = perf
     run_dir = ingest(args)
     analyze_args = argparse.Namespace(
         run=run_dir,
@@ -347,6 +398,7 @@ def run(args):
         encrypt_key=args.encrypt_key,
         sign_key=args.sign_key,
         redaction_policy=args.redaction_policy,
+        perf=perf,
     )
     report_dir = analyze(analyze_args)
     print(f"run output: {report_dir}")
@@ -639,6 +691,28 @@ def main():
     compare_parser.add_argument("--run-meta", default=None, help="run meta JSON (applies to both)")
     compare_parser.add_argument("--source", default=None, help="override source adapter (e.g., pba_excel)")
 
+    plan_parser = subparsers.add_parser("plan", help="plan runner")
+    plan_sub = plan_parser.add_subparsers(dest="plan_cmd", required=True)
+    plan_run_cmd = plan_sub.add_parser("run", help="run a plan YAML")
+    plan_run_cmd.add_argument("plan_path")
+    plan_run_cmd.add_argument("--out", default="plan_output")
+    plan_run_cmd.add_argument("--metric-registry", default=None)
+    plan_run_cmd.add_argument("--baseline-policy", default=None)
+    plan_run_cmd.add_argument("--asserts-dir", default=None)
+
+    bundle_parser = subparsers.add_parser("bundle", help="bundle results into a zip")
+    bundle_parser.add_argument("results_dir")
+    bundle_parser.add_argument("--out", default=None)
+
+    adapter_parser = subparsers.add_parser("adapter", help="adapter utilities")
+    adapter_sub = adapter_parser.add_subparsers(dest="adapter_cmd", required=True)
+    vxworks_cmd = adapter_sub.add_parser("vxworks", help="export VxWorks log to artifact_dir")
+    vxworks_cmd.add_argument("--log", required=True, help="path to VxWorks log")
+    vxworks_cmd.add_argument("--out", required=True, help="output artifact_dir")
+    vxworks_cmd.add_argument("--baseline-log", default=None, help="baseline log for profile inference")
+    vxworks_cmd.add_argument("--profile", default=None, help="existing parser_profile.json")
+    vxworks_cmd.add_argument("--run-meta", default=None, help="run_meta.json override")
+
     watch_parser = subparsers.add_parser("watch", help="watch a folder and run drift checks")
     watch_parser.add_argument("--dir", required=True, help="directory to watch")
     watch_parser.add_argument("--source", required=True, help="source type")
@@ -812,6 +886,57 @@ def main():
             )
             print(f"compare status: {result.status}")
             print(f"report: {result.report_path}")
+        elif args.command == "plan":
+            if args.metric_registry is None:
+                args.metric_registry = parser.get_default("metric_registry")
+            if args.baseline_policy is None:
+                args.baseline_policy = parser.get_default("baseline_policy")
+            payload = run_plan(
+                plan_path=args.plan_path,
+                out_dir=args.out,
+                metric_registry=args.metric_registry,
+                baseline_policy=args.baseline_policy,
+                asserts_dir=args.asserts_dir,
+            )
+            statuses = [item["status"] for item in payload.get("scenarios", [])]
+            overall = "PASS"
+            if any(status == "FAIL" for status in statuses):
+                overall = "FAIL"
+            elif any(status == "PASS_WITH_DRIFT" for status in statuses):
+                overall = "PASS_WITH_DRIFT"
+            elif any(status == "NO_TEST" for status in statuses):
+                overall = "NO_TEST"
+            print(f"plan status: {overall}")
+            if overall == "PASS":
+                sys.exit(EXIT_OK)
+            if overall == "PASS_WITH_DRIFT":
+                sys.exit(PLAN_EXIT_PASS_WITH_DRIFT)
+            if overall == "FAIL":
+                sys.exit(PLAN_EXIT_FAIL)
+            sys.exit(PLAN_EXIT_NO_TEST)
+        elif args.command == "bundle":
+            import zipfile
+
+            results_dir = args.results_dir
+            out_path = args.out or (results_dir.rstrip(os.sep) + ".zip")
+            with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for root, _, files in os.walk(results_dir):
+                    for name in files:
+                        full_path = os.path.join(root, name)
+                        rel_path = os.path.relpath(full_path, results_dir)
+                        zf.write(full_path, rel_path)
+            print(f"bundle written: {out_path}")
+        elif args.command == "adapter":
+            if args.adapter_cmd == "vxworks":
+                adapter = VxWorksLogAdapter()
+                adapter.export(
+                    log_path=args.log,
+                    out_dir=args.out,
+                    baseline_log_path=args.baseline_log,
+                    profile_path=args.profile,
+                    run_meta=args.run_meta,
+                )
+                print(f"adapter output: {args.out}")
         elif args.command == "watch":
             watch.run_watch(
                 watch_dir=args.dir,

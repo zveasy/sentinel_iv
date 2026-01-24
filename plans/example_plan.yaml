@@ -4,6 +4,6 @@ requirements:
     scenarios: [no_drift_case]
 scenarios:
   - id: no_drift_case
-    baseline_artifact_dir: samples/artifacts/no_drift_baseline
-    run_artifact_dir: samples/artifacts/no_drift_run
-    asserts: asserts/example_asserts.yaml
+    baseline_artifact_dir: ../samples/artifacts/no_drift_baseline
+    run_artifact_dir: ../samples/artifacts/no_drift_run
+    asserts: ../asserts/example_asserts.yaml

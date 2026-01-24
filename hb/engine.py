@@ -1,5 +1,10 @@
 import json
 
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
 from hb.registry_utils import normalize_alias
 
 
@@ -232,34 +237,133 @@ def _ks_statistic(sample_a, sample_b):
     return d
 
 
-def compare_metrics(current, baseline, metric_registry, distribution_enabled=True):
+def compare_metrics(
+    current,
+    baseline,
+    metric_registry,
+    distribution_enabled=True,
+    plan=None,
+    early_exit=False,
+    deterministic=False,
+):
     drift = []
     warnings = []
     fail = []
     invariant_violations = []
     distribution_drifts = []
     attribution = []
-    all_metrics = sorted(set(current.keys()) | set(baseline.keys()))
+    use_fast = plan is not None and np is not None
+    if plan is not None:
+        known = set(plan.metric_index.keys())
+        unknown = sorted((set(current.keys()) | set(baseline.keys())) - known)
+        all_metrics = plan.metrics + unknown
+        current_by_id = plan.index_metrics(current)
+        baseline_by_id = plan.index_metrics(baseline)
+        config_by_name = plan.config_by_name
+    else:
+        all_metrics = sorted(set(current.keys()) | set(baseline.keys()))
+        current_by_id = None
+        baseline_by_id = None
+        config_by_name = metric_registry["metrics"]
     if not all_metrics:
         warnings.append("no metrics evaluated")
         return "NO_METRICS", drift, warnings, fail, invariant_violations, distribution_drifts, attribution
-    for metric in all_metrics:
-        config = metric_registry["metrics"].get(metric, {})
-        cur = current.get(metric)
-        base = baseline.get(metric)
+    if use_fast:
+        values_cur = np.array(
+            [
+                payload.get("value") if payload and payload.get("value") is not None else np.nan
+                for payload in current_by_id
+            ],
+            dtype=float,
+        )
+        values_base = np.array(
+            [
+                payload.get("value") if payload and payload.get("value") is not None else np.nan
+                for payload in baseline_by_id
+            ],
+            dtype=float,
+        )
+        present_cur = ~np.isnan(values_cur)
+        present_base = ~np.isnan(values_base)
+        drift_thresholds = np.array(
+            [value if value is not None else np.nan for value in plan.drift_thresholds], dtype=float
+        )
+        drift_percents = np.array(
+            [value if value is not None else np.nan for value in plan.drift_percents], dtype=float
+        )
+        min_effects = np.array(
+            [value if value is not None else np.nan for value in plan.min_effects], dtype=float
+        )
+        fail_thresholds = np.array(
+            [value if value is not None else np.nan for value in plan.fail_thresholds], dtype=float
+        )
+        invariant_min = np.array(
+            [value if value is not None else np.nan for value in plan.invariant_min], dtype=float
+        )
+        invariant_max = np.array(
+            [value if value is not None else np.nan for value in plan.invariant_max], dtype=float
+        )
+        invariant_eq = np.array(
+            [value if value is not None else np.nan for value in plan.invariant_eq], dtype=float
+        )
+        critical_flags = np.array(plan.critical_flags, dtype=bool)
+        delta_arr = values_cur - values_base
+        percent_arr = np.full_like(values_base, np.nan, dtype=float)
+        np.divide(
+            delta_arr,
+            values_base,
+            out=percent_arr,
+            where=values_base != 0,
+        )
+        percent_arr *= 100.0
+        drift_by_threshold = np.abs(delta_arr) > drift_thresholds
+        drift_by_threshold = np.where(np.isnan(drift_thresholds), False, drift_by_threshold)
+        drift_by_percent = np.abs(percent_arr) > drift_percents
+        drift_by_percent = np.where(np.isnan(drift_percents), False, drift_by_percent)
+        drift_mask = drift_by_threshold | drift_by_percent
+        min_effect_mask = np.where(np.isnan(min_effects), False, np.abs(delta_arr) < min_effects)
+        drift_mask = np.where(min_effect_mask, False, drift_mask)
+        critical_fail = critical_flags & (
+            np.where(np.isnan(fail_thresholds), values_cur > 0, values_cur > fail_thresholds)
+        )
+        invariant_eq_fail = (~np.isnan(invariant_eq)) & (values_cur != invariant_eq)
+        invariant_min_fail = (~np.isnan(invariant_min)) & (values_cur < invariant_min)
+        invariant_max_fail = (~np.isnan(invariant_max)) & (values_cur > invariant_max)
+        invariant_mask = invariant_eq_fail | invariant_min_fail | invariant_max_fail
+    else:
+        values_cur = None
+        values_base = None
+        present_cur = None
+        present_base = None
+        delta_arr = None
+        percent_arr = None
+        drift_mask = None
+        critical_fail = None
+        invariant_mask = None
+    for idx, metric in enumerate(all_metrics):
+        config = config_by_name.get(metric, {})
+        if current_by_id is not None and idx < len(plan.metrics):
+            cur = current_by_id[idx]
+            base = baseline_by_id[idx]
+        else:
+            cur = current.get(metric)
+            base = baseline.get(metric)
         if cur is None or cur.get("value") is None:
             warnings.append(f"missing current metric: {metric}")
             continue
         invariant_min = config.get("invariant_min")
         invariant_max = config.get("invariant_max")
         invariant_eq = config.get("invariant_eq")
-        violated = False
-        if invariant_eq is not None and cur["value"] != invariant_eq:
-            violated = True
-        if invariant_min is not None and cur["value"] < invariant_min:
-            violated = True
-        if invariant_max is not None and cur["value"] > invariant_max:
-            violated = True
+        if use_fast and idx < len(plan.metrics):
+            violated = bool(invariant_mask[idx])
+        else:
+            violated = False
+            if invariant_eq is not None and cur["value"] != invariant_eq:
+                violated = True
+            if invariant_min is not None and cur["value"] < invariant_min:
+                violated = True
+            if invariant_max is not None and cur["value"] > invariant_max:
+                violated = True
         if violated:
             invariant_violations.append(
                 {
@@ -273,29 +377,40 @@ def compare_metrics(current, baseline, metric_registry, distribution_enabled=Tru
             fail.append(metric)
         if config.get("critical"):
             fail_threshold = config.get("fail_threshold")
-            if fail_threshold is None and cur["value"] > 0:
-                fail.append(metric)
-            elif fail_threshold is not None and cur["value"] > fail_threshold:
-                fail.append(metric)
+            if use_fast and idx < len(plan.metrics):
+                if critical_fail[idx]:
+                    fail.append(metric)
+            else:
+                if fail_threshold is None and cur["value"] > 0:
+                    fail.append(metric)
+                elif fail_threshold is not None and cur["value"] > fail_threshold:
+                    fail.append(metric)
 
         if base is None or base.get("value") is None:
             warnings.append(f"missing baseline metric: {metric}")
             continue
-        delta = cur["value"] - base["value"]
-        percent = None
-        if base["value"] != 0:
-            percent = (delta / base["value"]) * 100.0
+        if use_fast and idx < len(plan.metrics):
+            delta = float(delta_arr[idx])
+            percent = None if np.isnan(percent_arr[idx]) else float(percent_arr[idx])
+        else:
+            delta = cur["value"] - base["value"]
+            percent = None
+            if base["value"] != 0:
+                percent = (delta / base["value"]) * 100.0
 
         drift_threshold = config.get("drift_threshold")
         drift_percent = config.get("drift_percent")
         min_effect = config.get("min_effect")
-        is_drift = False
-        if drift_threshold is not None and abs(delta) > drift_threshold:
-            is_drift = True
-        if drift_percent is not None and percent is not None and abs(percent) > drift_percent:
-            is_drift = True
-        if is_drift and min_effect is not None and abs(delta) < min_effect:
+        if use_fast and idx < len(plan.metrics):
+            is_drift = bool(drift_mask[idx])
+        else:
             is_drift = False
+            if drift_threshold is not None and abs(delta) > drift_threshold:
+                is_drift = True
+            if drift_percent is not None and percent is not None and abs(percent) > drift_percent:
+                is_drift = True
+            if is_drift and min_effect is not None and abs(delta) < min_effect:
+                is_drift = False
 
         if is_drift:
             severity = "FAIL" if metric in fail else "DRIFT"
@@ -432,6 +547,9 @@ def compare_metrics(current, baseline, metric_registry, distribution_enabled=Tru
                 "flagged": flagged,
             }
         )
+        if early_exit and metric in fail:
+            warnings.append("early exit after fail threshold")
+            break
 
     if fail:
         status = "FAIL"
@@ -458,5 +576,15 @@ def compare_metrics(current, baseline, metric_registry, distribution_enabled=Tru
         for item in attribution
         if item.get("flagged") or item.get("metric_name") in flagged_metrics
     ]
-    top_drivers = sorted(filtered, key=lambda item: abs(item.get("score", 0.0)), reverse=True)
+    if deterministic:
+        top_drivers = sorted(
+            filtered,
+            key=lambda item: (-abs(item.get("score", 0.0)), item.get("metric_name") or ""),
+        )
+    elif np is not None and filtered:
+        scores = np.array([abs(item.get("score", 0.0)) for item in filtered], dtype=float)
+        order = np.argsort(-scores)
+        top_drivers = [filtered[idx] for idx in order.tolist()]
+    else:
+        top_drivers = sorted(filtered, key=lambda item: abs(item.get("score", 0.0)), reverse=True)
     return status, drift_sorted, warnings, fail, invariant_violations, distribution_drifts, top_drivers

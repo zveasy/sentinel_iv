@@ -1,4 +1,0 @@
-EVALUATION LICENSE
-
-This evaluation kit is provided "as-is" for internal evaluation purposes only.
-No redistribution, resale, or production use is permitted without a signed agreement.
