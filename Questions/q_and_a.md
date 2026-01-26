@@ -47,6 +47,7 @@ Answer: Only flagged metrics are kept: those with drift, fail, or distribution d
 
 # 14. Based on status for example: 1 increased by 147.41% (75.9843) exceeding warn threshold 0.1 for 5 consecutive cycles. How is this calculated and what does it mean?
 Answer: The report constructs this from the top driver: the percent change and delta come from the driver effect size, the warn threshold comes from the drift threshold/percent, and persistence cycles come from the drift_persistence setting (default 5). It means the top metric exceeded its warn threshold consistently across that many samples.
+Subpoint: It is not a target being met; it is a change relative to the baseline value. The metric moved +147.41% vs baseline (and by +75.9843 in absolute terms), which exceeded the warn threshold for the configured number of consecutive cycles.
 
 # 15. Distribution drift?
 Answer: Distribution drift is detected with a KS test when both baseline and current metrics include sample lists. If the KS statistic exceeds the configured threshold, the metric appears in `distribution_drifts`.
