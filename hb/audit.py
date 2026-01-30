@@ -26,6 +26,10 @@ def write_artifact_manifest(report_dir, files):
     out_path = os.path.join(report_dir, "artifact_manifest.json")
     with open(out_path, "w") as f:
         json.dump(manifest, f, indent=2)
+    try:
+        os.chmod(out_path, 0o600)
+    except OSError:
+        pass
     return out_path
 
 
@@ -60,6 +64,10 @@ def append_audit_log(report_dir, run_id, action, details):
     payload["entry_hash"] = _entry_hash(payload, prev_hash)
     with open(log_path, "a") as f:
         f.write(json.dumps(payload) + "\n")
+    try:
+        os.chmod(log_path, 0o600)
+    except OSError:
+        pass
     return log_path
 
 

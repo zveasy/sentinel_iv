@@ -16,6 +16,13 @@ def _ensure_dir(path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
 
+def _secure_file(path):
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
 def load_feedback_payload(path):
     with open(path, "r") as f:
         return json.load(f)
@@ -26,6 +33,7 @@ def write_feedback_record(payload, log_path=None):
     _ensure_dir(log_path)
     with open(log_path, "a") as f:
         f.write(json.dumps(payload) + "\n")
+    _secure_file(log_path)
 
 
 def export_feedback(log_path, output_path=None, mode="summary"):
@@ -89,6 +97,20 @@ def export_feedback(log_path, output_path=None, mode="summary"):
 
 class FeedbackHandler(BaseHTTPRequestHandler):
     log_path = None
+    token_env = "HB_FEEDBACK_TOKEN"
+
+    def _authorized(self, parsed_query=None):
+        token = os.environ.get(self.token_env)
+        if not token:
+            return True
+        header_token = self.headers.get("X-HB-Token")
+        if header_token and header_token == token:
+            return True
+        if parsed_query:
+            query_token = (parsed_query.get("token") or [None])[0]
+            if query_token == token:
+                return True
+        return False
 
     def _set_headers(self, status=200):
         self.send_response(status)
@@ -103,6 +125,10 @@ class FeedbackHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
+        if not self._authorized(parse_qs(parsed.query or "")) and parsed.path != "/health":
+            self._set_headers(401)
+            self.wfile.write(b'{"error":"unauthorized"}')
+            return
         if parsed.path == "/health":
             self._set_headers(200)
             self.wfile.write(b'{"status":"ok"}')
@@ -326,6 +352,10 @@ class FeedbackHandler(BaseHTTPRequestHandler):
         self.wfile.write(b'{"error":"not_found"}')
 
     def do_POST(self):
+        if not self._authorized():
+            self._set_headers(401)
+            self.wfile.write(b'{"error":"unauthorized"}')
+            return
         if self.path != "/feedback":
             self._set_headers(404)
             self.wfile.write(b'{"error":"not_found"}')

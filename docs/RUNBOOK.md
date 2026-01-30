@@ -15,6 +15,11 @@
 - `audit_log.jsonl` records analysis actions.
 - Verify signatures: `bin/hb verify --report-dir mvp/reports/<run_id> --sign-key keys/signing.key`
 
+## Diagnostics
+- Health check: `bin/hb support health`
+- Support bundle: `bin/hb support bundle --report-dir mvp/reports/<run_id>`
+- Heartbeat: `bin/hb monitor heartbeat` (writes to `artifacts/heartbeat.jsonl`)
+
 ## Backup & Retention
 - Backup registry: `tools/backup_registry.sh runs.db backups`
 - Prune reports: `python tools/retention_prune.py --policy retention_policy.yaml --db runs.db`
@@ -24,3 +29,4 @@
 - Restore `runs.db` from the latest backup.
 - Re-run analyses as needed to regenerate reports.
 - Verify integrity with manifests and signatures.
+- Follow `docs/INCIDENT_RESPONSE.md` for field incidents.

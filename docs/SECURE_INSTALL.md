@@ -14,3 +14,4 @@ Post-install:
 - Validate `artifact_manifest.json` and `audit_log.jsonl` are created.
 - Optionally sign reports with `--sign-key`.
 - If encryption is required, use `--encrypt-key` for report artifacts and SQLCipher for `runs.db`.
+- Run `python tools/license_scan.py --out artifacts/licenses.json --format json`.

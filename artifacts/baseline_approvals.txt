@@ -1,0 +1,3 @@
+approval_id | run_id | tag | approved_by | reason | approved_at | request_id
+------------+--------+-----+-------------+--------+-----------+-----------
+a0c90d76-9444-49ae-94e1-b38fb6a63b5d | 85074e03-891d-428a-a1c3-dc9963d30e54 | golden | waveos-supervisor@oandl | Validated baseline aligns with platform safety constraints and operational envelopes; approved for controlled enforcement and audit use. | 2026-01-30T16:54:24.511210+00:00 | b58a80fb-a8e8-4ae5-9d40-afa4f949b03e

@@ -1,0 +1,9 @@
+{
+  "action_type": "restart",
+  "params": {
+    "count": 1,
+    "service": "charger-service"
+  },
+  "ttl_seconds": 60,
+  "window_utc": "13:00"
+}

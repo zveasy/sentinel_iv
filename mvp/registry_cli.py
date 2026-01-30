@@ -60,6 +60,38 @@ def write_trend(conn, out_path, limit):
         """,
         (limit,),
     )
+    drift_idx = columns.index("drift_count") if "drift_count" in columns else None
+    drift_values = []
+    if drift_idx is not None:
+        for row in reversed(rows):
+            try:
+                drift_values.append(int(row[drift_idx]))
+            except Exception:
+                drift_values.append(0)
+
+    def _sparkline(values, width=420, height=80):
+        if not values:
+            return "<div class=\"muted\">No trend data available.</div>"
+        min_v = min(values)
+        max_v = max(values)
+        span = max(max_v - min_v, 1)
+        step = width / max(len(values) - 1, 1)
+        points = []
+        for idx, val in enumerate(values):
+            x = round(idx * step, 2)
+            y = round(height - ((val - min_v) / span) * height, 2)
+            points.append(f"{x},{y}")
+        points_str = " ".join(points)
+        last = points[-1].split(",")
+        return (
+            f"<svg width=\"{width}\" height=\"{height}\" viewBox=\"0 0 {width} {height}\" "
+            "preserveAspectRatio=\"none\">"
+            f"<polyline fill=\"none\" stroke=\"#0e6f8a\" stroke-width=\"2\" points=\"{points_str}\" />"
+            f"<circle r=\"3\" cx=\"{last[0]}\" cy=\"{last[1]}\" fill=\"#d9822b\" />"
+            "</svg>"
+        )
+
+    sparkline_html = _sparkline(drift_values)
     rows_html = []
     for row in rows:
         cells = "".join(f"<td>{html.escape(str(cell))}</td>" for cell in row)
@@ -76,10 +108,17 @@ def write_trend(conn, out_path, limit):
     table {{ border-collapse: collapse; width: 100%; }}
     th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
     th {{ background: #f3f3f3; }}
+    .trend-card {{ margin-bottom: 18px; padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fbfbfb; }}
+    .trend-title {{ font-weight: 600; margin-bottom: 6px; }}
+    .muted {{ color: #666; font-size: 13px; }}
   </style>
 </head>
 <body>
   <h1>Run Trend Summary</h1>
+  <div class="trend-card">
+    <div class="trend-title">Drift Count Trend</div>
+    {sparkline_html}
+  </div>
   <table>
     <thead>
       <tr>{header_cells}</tr>

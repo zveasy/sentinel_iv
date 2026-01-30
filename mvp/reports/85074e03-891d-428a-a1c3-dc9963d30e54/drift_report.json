@@ -1,0 +1,38 @@
+{
+  "run_id": "85074e03-891d-428a-a1c3-dc9963d30e54",
+  "status": "PASS",
+  "baseline_run_id": null,
+  "hb_version": "dev",
+  "source_type": "pba_excel",
+  "baseline_reason": "no_runs",
+  "baseline_warning": null,
+  "baseline_match_level": "NONE",
+  "baseline_match_fields": [],
+  "baseline_match_score": 0,
+  "baseline_match_possible": 0,
+  "context_mismatch_expected": false,
+  "drift_metrics": [],
+  "top_drifts": [],
+  "distribution_drifts": [],
+  "drift_attribution": {
+    "top_drivers": []
+  },
+  "likely_investigation_areas": [],
+  "decision_basis": null,
+  "warnings": [
+    "missing baseline metric: avg_latency_ms",
+    "missing current metric: cmapss_sensor_mean",
+    "missing current metric: cmapss_sensor_std",
+    "missing baseline metric: error_code_frequency",
+    "missing current metric: http_error_rate",
+    "missing baseline metric: max_latency_ms",
+    "missing baseline metric: missed_deadlines",
+    "missing baseline metric: reset_count",
+    "missing current metric: smap_msl_mean",
+    "missing current metric: smap_msl_std",
+    "missing current metric: smap_msl_value_dist",
+    "missing baseline metric: watchdog_triggers"
+  ],
+  "fail_metrics": [],
+  "invariant_violations": []
+}

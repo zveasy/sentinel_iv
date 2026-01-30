@@ -30,12 +30,19 @@ def write_report(report_dir, payload):
     write_json(json_path, payload)
 
     drift_rows = []
+    diff_rows = []
     def _cell(value, suffix=""):
         if value is None:
             return "<span class=\"muted\">n/a</span>"
         return f"{value}{suffix}"
 
-    for item in payload.get("top_drifts", payload.get("drift_metrics", [])):
+    drift_items = payload.get("top_drifts", payload.get("drift_metrics", []))
+    max_abs_delta = 0
+    for item in drift_items:
+        delta = item.get("delta")
+        if isinstance(delta, (int, float)):
+            max_abs_delta = max(max_abs_delta, abs(delta))
+    for item in drift_items:
         threshold_cell = _cell(item.get("drift_threshold"))
         percent_threshold_cell = _cell(item.get("drift_percent"))
         if item.get("drift_threshold") is not None and abs(item.get("delta", 0)) > item.get("drift_threshold"):
@@ -60,7 +67,23 @@ def write_report(report_dir, payload):
             f"<td>{_narrative(item)}</td>"
             "</tr>"
         )
+        delta = item.get("delta")
+        if delta is None or max_abs_delta == 0:
+            bar_width = 0
+        else:
+            bar_width = min(100, round(abs(delta) / max_abs_delta * 100))
+        bar_class = "bar-pos" if (delta or 0) >= 0 else "bar-neg"
+        diff_rows.append(
+            "<tr>"
+            f"<td>{item['metric']}</td>"
+            f"<td>{_cell(item.get('baseline'))}</td>"
+            f"<td>{_cell(item.get('current'))}</td>"
+            f"<td>{_cell(delta)}</td>"
+            f"<td><div class=\"bar-track\"><div class=\"bar {bar_class}\" style=\"width:{bar_width}%\"></div></div></td>"
+            "</tr>"
+        )
     drift_table = "\n".join(drift_rows)
+    diff_table = "\n".join(diff_rows) if diff_rows else "<tr><td colspan=\"5\">none</td></tr>"
 
     baseline_reason = payload.get("baseline_reason") or "unknown"
     match_level = payload.get("baseline_match_level") or "none"
@@ -391,6 +414,18 @@ def write_report(report_dir, payload):
     .btn-primary {{ background: var(--accent); color: #fff; }}
     .btn-warn {{ background: var(--accent-2); color: #fff; }}
     .btn-neutral {{ background: #eef4f6; color: var(--ink); }}
+    .bar-track {{
+      background: #e8edf2;
+      border-radius: 6px;
+      height: 10px;
+      width: 100%;
+      overflow: hidden;
+    }}
+    .bar {{
+      height: 10px;
+    }}
+    .bar-pos {{ background: #2f855a; }}
+    .bar-neg {{ background: #b45309; }}
     .highlight {{ color: var(--accent-2); font-weight: 700; }}
     .info-button {{
       display: inline-flex;
@@ -516,6 +551,10 @@ def write_report(report_dir, payload):
         <label>Time to resolution (minutes):</label>
         <input id="feedback-ttf" type="number" min="0" />
       </div>
+      <div style="margin-top: 6px;">
+        <label>Access token (optional):</label>
+        <input id="feedback-token" type="password" />
+      </div>
       <div id="feedback-status" class="muted" style="margin-top: 6px;"></div>
     </div>
 
@@ -540,6 +579,25 @@ def write_report(report_dir, payload):
       {drift_table}
     </tbody>
       </table>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Diff Visualization</div>
+      <table>
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Baseline</th>
+        <th>Current</th>
+        <th>Delta</th>
+        <th>Delta Magnitude</th>
+      </tr>
+    </thead>
+    <tbody>
+      {diff_table}
+    </tbody>
+      </table>
+      <div class="muted">Bar length shows relative delta magnitude across flagged metrics.</div>
     </div>
 
     <div class="card">
@@ -589,6 +647,11 @@ def write_report(report_dir, payload):
       }}
       const note = document.getElementById('feedback-note').value;
       const ttf = document.getElementById('feedback-ttf').value;
+      const token = document.getElementById('feedback-token').value;
+      const headers = {{'Content-Type': 'application/json'}};
+      if (token) {{
+        headers['X-HB-Token'] = token;
+      }}
       const payload = Object.assign({{}}, feedbackBase, {{
         operator_action: action,
         operator_note: note || null,
@@ -596,7 +659,7 @@ def write_report(report_dir, payload):
       }});
       fetch('http://127.0.0.1:8765/feedback', {{
         method: 'POST',
-        headers: {{'Content-Type': 'application/json'}},
+        headers: headers,
         body: JSON.stringify(payload)
       }}).then(resp => resp.json()).then(data => {{
         document.getElementById('feedback-status').textContent = 'Feedback saved.';
@@ -605,7 +668,12 @@ def write_report(report_dir, payload):
       }});
     }}
     function exportFeedback() {{
-      fetch('http://127.0.0.1:8765/export?mode=summary').then(resp => resp.json()).then(data => {{
+      const token = document.getElementById('feedback-token').value;
+      const headers = {{}};
+      if (token) {{
+        headers['X-HB-Token'] = token;
+      }}
+      fetch('http://127.0.0.1:8765/export?mode=summary', {{ headers }}).then(resp => resp.json()).then(data => {{
         const blob = new Blob([JSON.stringify(data, null, 2)], {{type: 'application/json'}});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');

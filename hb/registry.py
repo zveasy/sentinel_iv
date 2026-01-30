@@ -71,6 +71,21 @@ def init_db(path):
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS baseline_lineage (
+            run_id TEXT PRIMARY KEY,
+            baseline_run_id TEXT,
+            registry_hash TEXT,
+            policy_hash TEXT,
+            baseline_reason TEXT,
+            baseline_match_level TEXT,
+            baseline_match_score REAL,
+            baseline_match_fields TEXT,
+            created_at TEXT
+        )
+        """
+    )
     cursor = conn.execute("PRAGMA table_info(runs)")
     columns = {row[1] for row in cursor.fetchall()}
     if "registry_hash" not in columns:
@@ -102,6 +117,42 @@ def init_db(path):
     )
     conn.commit()
     return conn
+
+
+def add_baseline_lineage(
+    conn,
+    run_id,
+    baseline_run_id,
+    registry_hash,
+    policy_hash,
+    baseline_reason,
+    baseline_match_level,
+    baseline_match_score,
+    baseline_match_fields,
+):
+    fields = ",".join(baseline_match_fields or [])
+    created_at = datetime.now(timezone.utc).isoformat()
+    _execute_with_retry(
+        conn,
+        """
+        INSERT OR REPLACE INTO baseline_lineage
+        (run_id, baseline_run_id, registry_hash, policy_hash, baseline_reason,
+         baseline_match_level, baseline_match_score, baseline_match_fields, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            run_id,
+            baseline_run_id,
+            registry_hash,
+            policy_hash,
+            baseline_reason,
+            baseline_match_level,
+            baseline_match_score,
+            fields,
+            created_at,
+        ),
+    )
+    conn.commit()
 
 
 def _execute_with_retry(conn, query, params=(), retries=3, delay=0.25):

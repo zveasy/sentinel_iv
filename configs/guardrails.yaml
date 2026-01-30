@@ -1,0 +1,12 @@
+guardrails:
+  ttl_seconds_max: 300
+  allowed_windows_utc:
+    - "00:00-23:59"
+  actions:
+    safe_mode:
+      allowed_levels: ["LOW", "MED", "HIGH"]
+    rate_limit:
+      min_rps: 0.1
+      max_rps: 50.0
+    restart:
+      max_per_hour: 2

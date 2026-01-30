@@ -1,0 +1,8 @@
+{
+  "action_type": "rate_limit",
+  "params": {
+    "rps": 10.0
+  },
+  "ttl_seconds": 120,
+  "window_utc": "12:00"
+}

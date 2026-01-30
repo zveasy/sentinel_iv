@@ -45,12 +45,15 @@ from hb.registry import (
     set_baseline_request_status,
     count_baseline_approvals,
     run_exists,
+    add_baseline_lineage,
 )
 from hb.registry_utils import build_alias_index
 from hb.audit import append_audit_log, write_artifact_manifest, verify_artifact_manifest
 from hb.report import write_report, write_pdf
 from hb.security import load_key, sign_file, verify_signature, encrypt_file
 from hb.redaction import apply_redaction
+from hb.support import health_check, build_support_bundle
+from hb.monitor import write_heartbeat, tail_heartbeats
 
 
 def file_hash(path):
@@ -127,8 +130,9 @@ def ingest(args):
                 metrics_raw = adapter.parse_stream(args.path)
             else:
                 metrics_raw = adapter.parse(args.path)
-    registry = load_metric_registry(args.metric_registry)
-    compare_plan = load_compare_plan(args.metric_registry)
+    program = run_meta.get("program")
+    registry = load_metric_registry(args.metric_registry, program=program)
+    compare_plan = load_compare_plan(args.metric_registry, program=program)
     deterministic = os.environ.get("HB_DETERMINISTIC", "0") == "1"
     early_exit = os.environ.get("HB_EARLY_EXIT", "0") == "1"
     metrics_normalized, warnings = engine.normalize_metrics(metrics_raw, registry)
@@ -179,11 +183,13 @@ def analyze(args):
     if perf is None:
         perf = PerfRecorder()
     run_meta = read_json(os.path.join(run_dir, "run_meta_normalized.json"))
-    registry = load_metric_registry(args.metric_registry)
+    program = run_meta.get("program")
+    registry = load_metric_registry(args.metric_registry, program=program)
     with perf.span("compile_plan"):
-        compare_plan = load_compare_plan(args.metric_registry)
+        compare_plan = load_compare_plan(args.metric_registry, program=program)
     policy = load_baseline_policy(args.baseline_policy)
     registry_hash = file_hash(args.metric_registry)
+    policy_hash = file_hash(args.baseline_policy)
     redaction_policy = args.redaction_policy
     distribution_enabled = policy.get("distribution_drift_enabled", True)
     deterministic = os.environ.get("HB_DETERMINISTIC", "0") == "1"
@@ -366,6 +372,17 @@ def analyze(args):
         baseline_run_id=baseline_run_id,
         registry_hash=registry_hash,
     )
+    add_baseline_lineage(
+        conn,
+        run_meta["run_id"],
+        baseline_run_id,
+        registry_hash,
+        policy_hash,
+        baseline_reason,
+        baseline_match.get("level"),
+        baseline_match.get("score"),
+        baseline_match.get("matched_fields", []),
+    )
     replace_metrics(conn, run_meta["run_id"], _metrics_to_rows(metrics_current))
 
     write_json(os.path.join(report_dir, "run_meta_normalized.json"), report_meta)
@@ -418,6 +435,33 @@ def feedback_export(args):
 
 def feedback_serve(args):
     feedback.serve_feedback(port=args.port, log_path=args.log)
+
+
+def support_health(args):
+    payload = health_check(args.db, args.metric_registry, args.baseline_policy)
+    print(yaml.safe_dump(payload, sort_keys=False))
+
+
+def support_bundle(args):
+    out_path = build_support_bundle(
+        out_path=args.out,
+        db_path=args.db,
+        metric_registry=args.metric_registry,
+        baseline_policy=args.baseline_policy,
+        report_dir=args.report_dir,
+    )
+    print(f"support bundle written: {out_path}")
+
+
+def monitor_heartbeat(args):
+    out_path = write_heartbeat(args.log, status=args.status)
+    print(f"heartbeat written: {out_path}")
+
+
+def monitor_tail(args):
+    lines = tail_heartbeats(args.log, limit=args.limit)
+    for line in lines:
+        print(line)
 
 
 def baseline_set(args):
@@ -740,6 +784,28 @@ def main():
     feedback_serve_cmd.add_argument("--log", default=None, help="override feedback log path")
     feedback_serve_cmd.add_argument("--port", type=int, default=int(os.environ.get("HB_FEEDBACK_PORT", 8765)))
 
+    support_parser = subparsers.add_parser("support", help="support diagnostics")
+    support_sub = support_parser.add_subparsers(dest="support_cmd", required=True)
+    support_health_cmd = support_sub.add_parser("health", help="run health checks")
+    support_health_cmd.add_argument("--db", default=None)
+    support_health_cmd.add_argument("--metric-registry", default=None)
+    support_health_cmd.add_argument("--baseline-policy", default=None)
+    support_bundle_cmd = support_sub.add_parser("bundle", help="write a support bundle zip")
+    support_bundle_cmd.add_argument("--out", default="support_bundle.zip")
+    support_bundle_cmd.add_argument("--db", default=None)
+    support_bundle_cmd.add_argument("--metric-registry", default=None)
+    support_bundle_cmd.add_argument("--baseline-policy", default=None)
+    support_bundle_cmd.add_argument("--report-dir", default=None)
+
+    monitor_parser = subparsers.add_parser("monitor", help="monitoring hooks")
+    monitor_sub = monitor_parser.add_subparsers(dest="monitor_cmd", required=True)
+    monitor_heartbeat_cmd = monitor_sub.add_parser("heartbeat", help="write a heartbeat entry")
+    monitor_heartbeat_cmd.add_argument("--log", default="artifacts/heartbeat.jsonl")
+    monitor_heartbeat_cmd.add_argument("--status", default="ok")
+    monitor_tail_cmd = monitor_sub.add_parser("tail", help="tail heartbeat entries")
+    monitor_tail_cmd.add_argument("--log", default="artifacts/heartbeat.jsonl")
+    monitor_tail_cmd.add_argument("--limit", type=int, default=20)
+
     db_parser = subparsers.add_parser("db", help="database utilities")
     db_sub = db_parser.add_subparsers(dest="db_cmd", required=True)
     db_encrypt = db_sub.add_parser("encrypt", help="encrypt runs.db with sqlcipher")
@@ -956,6 +1022,22 @@ def main():
                 feedback_export(args)
             elif args.feedback_cmd == "serve":
                 feedback_serve(args)
+        elif args.command == "support":
+            if args.metric_registry is None:
+                args.metric_registry = parser.get_default("metric_registry")
+            if args.baseline_policy is None:
+                args.baseline_policy = parser.get_default("baseline_policy")
+            if args.db is None:
+                args.db = parser.get_default("db")
+            if args.support_cmd == "health":
+                support_health(args)
+            elif args.support_cmd == "bundle":
+                support_bundle(args)
+        elif args.command == "monitor":
+            if args.monitor_cmd == "heartbeat":
+                monitor_heartbeat(args)
+            elif args.monitor_cmd == "tail":
+                monitor_tail(args)
         elif args.command == "db":
             script_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tools"))
             if args.db_cmd == "encrypt":

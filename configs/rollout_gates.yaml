@@ -1,0 +1,16 @@
+gates:
+  - name: sbom_present
+    type: file_exists
+    path: SBOM.md
+  - name: license_scan_present
+    type: file_exists
+    path: artifacts/licenses.json
+  - name: baseline_approvals_present
+    type: file_exists
+    path: artifacts/baseline_approvals.txt
+  - name: baseline_requests_present
+    type: file_exists
+    path: artifacts/baseline_requests.txt
+  - name: support_bundle_present
+    type: file_exists
+    path: artifacts/support_bundle.zip

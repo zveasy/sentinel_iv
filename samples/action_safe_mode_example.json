@@ -1,0 +1,8 @@
+{
+  "action_type": "safe_mode",
+  "params": {
+    "level": "MED"
+  },
+  "ttl_seconds": 180,
+  "window_utc": "12:30"
+}

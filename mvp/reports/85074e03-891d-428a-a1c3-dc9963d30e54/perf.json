@@ -1,0 +1,32 @@
+{
+  "meta": {
+    "ingest_source": "samples/pba_unit_sheet_example.xlsx",
+    "ingest_bytes": 5595,
+    "ingest_metrics": 6,
+    "ingest_file_type": "xlsx",
+    "metrics_count": 6,
+    "metrics_bytes": 187
+  },
+  "spans": [
+    {
+      "name": "ingest_run",
+      "start_s": 1769791539.595291,
+      "duration_s": 0.091685
+    },
+    {
+      "name": "compile_plan",
+      "start_s": 1769791539.691894,
+      "duration_s": 7e-06
+    },
+    {
+      "name": "compare_core",
+      "start_s": 1769791539.6964018,
+      "duration_s": 0.000484
+    },
+    {
+      "name": "render_report",
+      "start_s": 1769791539.6969001,
+      "duration_s": 0.00079
+    }
+  ]
+}
