@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "ingest_source": "/Users/zakariyaveasy/Desktop/ZKJ/sentinel_iv/samples/cases/single_metric_drift/baseline_source.csv",
+    "ingest_bytes": 212,
+    "ingest_metrics": 6,
+    "ingest_rows": 6,
+    "ingest_file_type": "csv",
+    "metrics_count": 6,
+    "metrics_bytes": 171,
+    "baseline_run_id": "single_metric_drift_baseline"
+  },
+  "spans": [
+    {
+      "name": "ingest_run",
+      "start_s": 1770993905.782132,
+      "duration_s": 0.001175
+    },
+    {
+      "name": "compile_plan",
+      "start_s": 1770993905.787435,
+      "duration_s": 5e-06
+    },
+    {
+      "name": "compare_core",
+      "start_s": 1770993905.790695,
+      "duration_s": 0.000198
+    },
+    {
+      "name": "render_report",
+      "start_s": 1770993905.79091,
+      "duration_s": 0.000295
+    }
+  ]
+}

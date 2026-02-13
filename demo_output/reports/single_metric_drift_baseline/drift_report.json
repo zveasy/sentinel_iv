@@ -1,0 +1,42 @@
+{
+  "run_id": "single_metric_drift_baseline",
+  "status": "PASS",
+  "baseline_run_id": "single_metric_drift_baseline",
+  "hb_version": "dev",
+  "source_type": "pba_excel",
+  "baseline_reason": "last_pass",
+  "baseline_warning": null,
+  "baseline_match_level": "HIGH",
+  "baseline_match_fields": [
+    "scenario_id",
+    "operating_mode",
+    "environment",
+    "environment_fingerprint",
+    "sensor_config_id",
+    "input_data_version"
+  ],
+  "baseline_match_score": 6,
+  "baseline_match_possible": 6,
+  "context_mismatch_expected": false,
+  "drift_metrics": [],
+  "top_drifts": [],
+  "distribution_drifts": [],
+  "drift_attribution": {
+    "top_drivers": []
+  },
+  "likely_investigation_areas": [],
+  "decision_basis": null,
+  "warnings": [
+    "missing current metric: cmapss_sensor_mean",
+    "missing current metric: cmapss_sensor_std",
+    "missing current metric: http_error_rate",
+    "missing current metric: smap_msl_mean",
+    "missing current metric: smap_msl_std",
+    "missing current metric: smap_msl_value_dist"
+  ],
+  "fail_metrics": [],
+  "invariant_violations": [],
+  "investigation_hints": [],
+  "what_to_do_next": "Primary issue: Missing metrics or data: missing current metric: cmapss_sensor_mean; missing current metric: cmapss_sensor_std; missing current metric: http_error_rate",
+  "primary_issue": "Missing metrics or data: missing current metric: cmapss_sensor_mean; missing current metric: cmapss_sensor_std; missing current metric: http_error_rate"
+}

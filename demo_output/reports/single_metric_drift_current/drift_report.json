@@ -1,0 +1,132 @@
+{
+  "run_id": "single_metric_drift_current",
+  "status": "PASS_WITH_DRIFT",
+  "baseline_run_id": "single_metric_drift_baseline",
+  "hb_version": "dev",
+  "source_type": "pba_excel",
+  "baseline_reason": "last_pass",
+  "baseline_warning": null,
+  "baseline_match_level": "HIGH",
+  "baseline_match_fields": [
+    "scenario_id",
+    "operating_mode",
+    "environment",
+    "environment_fingerprint",
+    "sensor_config_id",
+    "input_data_version"
+  ],
+  "baseline_match_score": 6,
+  "baseline_match_possible": 6,
+  "context_mismatch_expected": false,
+  "drift_metrics": [
+    {
+      "metric": "avg_latency_ms",
+      "baseline": 10.0,
+      "current": 12.0,
+      "delta": 2.0,
+      "percent_change": 20.0,
+      "drift_threshold": 1.0,
+      "drift_percent": 10.0,
+      "min_effect": 0.5,
+      "unit": "ms",
+      "severity": "DRIFT"
+    }
+  ],
+  "top_drifts": [
+    {
+      "metric": "avg_latency_ms",
+      "baseline": 10.0,
+      "current": 12.0,
+      "delta": 2.0,
+      "percent_change": 20.0,
+      "drift_threshold": 1.0,
+      "drift_percent": 10.0,
+      "min_effect": 0.5,
+      "unit": "ms",
+      "severity": "DRIFT"
+    }
+  ],
+  "distribution_drifts": [],
+  "drift_attribution": {
+    "top_drivers": [
+      {
+        "metric_name": "avg_latency_ms",
+        "direction": "up",
+        "effect_size": {
+          "delta": 2.0,
+          "percent": 20.0,
+          "zscore": null
+        },
+        "baseline_stats": {
+          "mean": 10.0,
+          "median": 10.0,
+          "p95": 10.0
+        },
+        "current_stats": {
+          "mean": 12.0,
+          "median": 12.0,
+          "p95": 12.0
+        },
+        "confidence": "low",
+        "onset": null,
+        "raw_features": [],
+        "raw_feature_correlations": null,
+        "corr_method": "pearson",
+        "n_points_used": 0,
+        "min_abs_corr_display": 0.3,
+        "correlation_note": null,
+        "evidence": null,
+        "decision_basis": [
+          "drift_threshold",
+          "drift_percent"
+        ],
+        "score": 20.0,
+        "drift_score": 20.0,
+        "warn_threshold": 1.0,
+        "fail_threshold": null,
+        "persistence_cycles": 5,
+        "score_type": "percent",
+        "drift_threshold": 1.0,
+        "drift_percent": 10.0,
+        "flagged": true
+      }
+    ]
+  },
+  "likely_investigation_areas": [
+    "downstream service latency",
+    "request queuing",
+    "resource saturation",
+    "runtime scheduling"
+  ],
+  "decision_basis": {
+    "drift_score": 20.0,
+    "warn_threshold": 1.0,
+    "fail_threshold": null,
+    "persistence_cycles": 5,
+    "score_type": "percent"
+  },
+  "warnings": [
+    "missing current metric: cmapss_sensor_mean",
+    "missing current metric: cmapss_sensor_std",
+    "missing current metric: http_error_rate",
+    "missing current metric: smap_msl_mean",
+    "missing current metric: smap_msl_std",
+    "missing current metric: smap_msl_value_dist"
+  ],
+  "fail_metrics": [],
+  "invariant_violations": [],
+  "investigation_hints": [
+    {
+      "metric": "avg_latency_ms",
+      "pinpoint": "**avg_latency_ms** increased by 20.0%  (absolute change: 2.0) | warn threshold: 10.0%.",
+      "suggested_actions": [
+        "If change is intentional, consider updating the baseline for this scenario.",
+        "Check runtime scheduling, queuing, and downstream latency."
+      ],
+      "root_cause_category": "threshold_exceeded",
+      "root_cause_label": "Drift threshold exceeded"
+    }
+  ],
+  "what_to_do_next": "Primary issue: **avg_latency_ms** increased by 20.0%  (absolute change: 2.0) | warn threshold: 10.0%. Suggested next steps: If change is intentional, consider updating the baseline for this scenario. Address missing-metric warnings so coverage is complete.",
+  "primary_issue": "**avg_latency_ms** increased by 20.0%  (absolute change: 2.0) | warn threshold: 10.0%."
+}

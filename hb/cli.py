@@ -287,6 +287,15 @@ def analyze(args):
             )
     likely_areas = sorted({area for area in likely_areas}) if likely_areas else []
 
+    from hb.investigation import build_investigation_hints
+    investigation = build_investigation_hints(
+        drift_attribution=drift_attribution,
+        fail_metrics=fail_metrics,
+        invariant_violations=invariant_violations,
+        status=status,
+        warnings=warnings,
+    )
+
     report_payload = {
         "run_id": report_meta["run_id"],
         "status": status,
@@ -309,6 +318,9 @@ def analyze(args):
         "warnings": warnings,
         "fail_metrics": fail_metrics,
         "invariant_violations": invariant_violations,
+        "investigation_hints": investigation.get("investigation_hints", []),
+        "what_to_do_next": investigation.get("what_to_do_next", ""),
+        "primary_issue": investigation.get("primary_issue"),
     }
 
     report_dir = os.path.join(args.reports, report_meta["run_id"])
@@ -328,6 +340,10 @@ def analyze(args):
     print(baseline_line)
     if baseline_warning:
         print(f"baseline warning: {baseline_warning}")
+    what_next = investigation.get("what_to_do_next")
+    if what_next:
+        print(f"report: {os.path.join(report_dir, 'drift_report.html')}")
+        print(f"what to do next: {what_next[:200]}{'...' if len(what_next) > 200 else ''}")
 
     manifest_path = write_artifact_manifest(
         report_dir,

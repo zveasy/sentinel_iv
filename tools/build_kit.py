@@ -31,6 +31,7 @@ def main():
     parser = argparse.ArgumentParser(description="Build Hybrid Kit zip artifact.")
     parser.add_argument("--out-dir", default="artifacts", help="output directory for kit zip")
     parser.add_argument("--force", action="store_true", help="overwrite existing output")
+    parser.add_argument("--checksums", action="store_true", help="generate checksum files for the zip after build")
     args = parser.parse_args()
 
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -84,11 +85,39 @@ def main():
         os.path.join(examples_dir, "run_drift", "current_run_meta.json"),
     )
 
+    # Commercial-ready: customer-facing docs and changelog
+    docs_src = os.path.join(root, "docs")
+    docs_dst = os.path.join(kit_dir, "docs")
+    _ensure_dir(docs_dst)
+    for doc in [
+        "THREAT_MODEL_CUSTOMER.md",
+        "INTEGRITY_VERIFICATION.md",
+        "SUPPORT.md",
+        "SECURE_INSTALL.md",
+        "OFFLINE_INSTALL.md",
+    ]:
+        src = os.path.join(docs_src, doc)
+        if os.path.isfile(src):
+            shutil.copy2(src, os.path.join(docs_dst, doc))
+    if os.path.isfile(os.path.join(root, "CHANGELOG.md")):
+        shutil.copy2(os.path.join(root, "CHANGELOG.md"), os.path.join(kit_dir, "CHANGELOG.md"))
+
     zip_path = os.path.join(out_root, f"{kit_dir_name}.zip")
     if os.path.exists(zip_path) and args.force:
         os.remove(zip_path)
     _zip_dir(kit_dir, zip_path)
     print(f"kit created: {zip_path}")
+
+    if args.checksums:
+        # Generate integrity verification files for commercial distribution
+        import subprocess
+        import sys
+        script = os.path.join(root, "tools", "release_checksums.py")
+        subprocess.run(
+            [sys.executable, script, "--kit", zip_path, "--out", out_root],
+            check=True,
+            cwd=root,
+        )
 
 
 if __name__ == "__main__":

@@ -317,6 +317,28 @@ def write_report(report_dir, payload):
     if status_value == "NO_METRICS":
         no_metrics_hint = "No metrics were evaluated. Check schema/registry mapping."
 
+    what_to_do_next = payload.get("what_to_do_next") or ""
+    hint_items = payload.get("investigation_hints") or []
+    investigation_hints_section = ""
+    if hint_items:
+        lines = []
+        for h in hint_items:
+            raw = h.get("pinpoint") or ""
+            pinpoint = raw.replace("**", "<strong>", 1).replace("**", "</strong>", 1) if "**" in raw else raw
+            actions = h.get("suggested_actions") or []
+            actions_html = "<ul>" + "".join(f"<li>{a}</li>" for a in actions) + "</ul>" if actions else ""
+            cat = h.get("root_cause_label") or h.get("root_cause_category") or ""
+            lines.append(
+                f'<div class="hint-block" style="margin-bottom:14px; padding:10px; background:#f8f9fa; border-radius:8px; border-left:4px solid var(--accent);">'
+                f'<div class="label" style="margin-bottom:4px;">{h.get("metric")} <span class="muted">({cat})</span></div>'
+                f'<div class="pinpoint" style="margin-bottom:6px;">{pinpoint}</div>'
+                f'<div class="suggested-actions" style="font-size:13px;">{actions_html}</div>'
+                f"</div>"
+            )
+        investigation_hints_section = "\n".join(lines)
+    else:
+        investigation_hints_section = "<div class=\"muted\">No specific hints (PASS or no flagged metrics).</div>"
+
     html_doc = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -522,6 +544,13 @@ def write_report(report_dir, payload):
       <div class="big">{top_drivers}</div>
       <div class="muted">Likely investigation areas: {", ".join(payload.get("likely_investigation_areas") or []) or "none"}</div>
       <div class="muted">Baseline reason: {baseline_reason} | Warning: {baseline_warning or 'none'}</div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">What to do next</div>
+      <div class="big" style="margin-bottom:12px;">{what_to_do_next}</div>
+      <div class="label" style="margin-top:12px;">Pinpoint &amp; suggested actions</div>
+      {investigation_hints_section}
     </div>
 
     <div class="card">

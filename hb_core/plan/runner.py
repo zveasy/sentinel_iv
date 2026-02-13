@@ -7,6 +7,7 @@ import yaml
 
 from hb import engine
 from hb.config import load_baseline_policy, load_compare_plan, load_metric_registry
+from hb.investigation import build_investigation_hints
 from hb.report import write_report
 from hb_core.artifact import load_metrics_csv, load_run_meta, validate_artifact_dir
 from hb_core.asserts import evaluate_asserts, load_asserts
@@ -172,6 +173,14 @@ def run_plan(plan_path, out_dir, metric_registry, baseline_policy, asserts_dir=N
 
         status = _merge_status(drift_status, assert_results)
 
+        investigation = build_investigation_hints(
+            drift_attribution=drift_attribution,
+            fail_metrics=fail_metrics,
+            invariant_violations=invariant_violations,
+            status=status,
+            warnings=warnings,
+        )
+
         report_payload = {
             "run_id": run_meta.get("run_id") or f"{scenario_id}_{uuid.uuid4().hex[:6]}",
             "status": status,
@@ -193,6 +202,21 @@ def run_plan(plan_path, out_dir, metric_registry, baseline_policy, asserts_dir=N
             "fail_metrics": fail_metrics,
             "invariant_violations": invariant_violations,
             "assert_results": assert_results,
+            "investigation_hints": investigation.get("investigation_hints", []),
+            "what_to_do_next": investigation.get("what_to_do_next", ""),
+            "primary_issue": investigation.get("primary_issue"),
+            "likely_investigation_areas": [],
+            "decision_basis": (
+                {
+                    "drift_score": drift_attribution[0].get("drift_score"),
+                    "warn_threshold": drift_attribution[0].get("warn_threshold"),
+                    "fail_threshold": drift_attribution[0].get("fail_threshold"),
+                    "persistence_cycles": drift_attribution[0].get("persistence_cycles"),
+                    "score_type": drift_attribution[0].get("score_type"),
+                }
+                if drift_attribution
+                else None
+            ),
         }
 
         scenario_dir = os.path.join(out_dir, "results", scenario_id)

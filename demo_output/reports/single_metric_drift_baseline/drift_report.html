@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Harmony Bridge Drift Report</title>
+  <style>
+    :root {
+      --bg: #f6f2ec;
+      --panel: #ffffff;
+      --ink: #1f2a33;
+      --muted: #5b6b76;
+      --accent: #0e6f8a;
+      --accent-2: #d9822b;
+      --ok: #2f855a;
+      --fail: #b91c1c;
+      --shadow: 0 12px 30px rgba(24, 39, 75, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Avenir Next", "Trebuchet MS", "Gill Sans", sans-serif;
+      margin: 0;
+      color: var(--ink);
+      background: radial-gradient(circle at top left, #fdf8f0, var(--bg));
+    }
+    header {
+      padding: 28px 36px 18px;
+      background: linear-gradient(120deg, #f7efe2 0%, #f3f7f9 100%);
+      border-bottom: 1px solid #e6e2d7;
+    }
+    header h1 {
+      margin: 0 0 6px;
+      font-size: 26px;
+      letter-spacing: 0.2px;
+    }
+    header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    main {
+      padding: 24px 36px 40px;
+      display: grid;
+      gap: 18px;
+    }
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+    .card {
+      background: var(--panel);
+      border-radius: 14px;
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+      border: 1px solid #edf0f3;
+    }
+    .label {
+      text-transform: uppercase;
+      font-size: 12px;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .big {
+      font-size: 20px;
+      font-weight: 600;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: 0.3px;
+    }
+    .status-pass { background: #e7f6ee; color: var(--ok); }
+    .status-drift { background: #fff2e5; color: var(--accent-2); }
+    .status-fail { background: #feecec; color: var(--fail); }
+    .status-unknown { background: #eef2f5; color: var(--muted); }
+    .muted { color: var(--muted); font-size: 14px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #e2e8f0; padding: 8px; text-align: left; font-size: 13px; }
+    th { background: #f3f5f7; }
+    .section-title { font-size: 18px; margin: 6px 0 8px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn {
+      border: none;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-warn { background: var(--accent-2); color: #fff; }
+    .btn-neutral { background: #eef4f6; color: var(--ink); }
+    .bar-track {
+      background: #e8edf2;
+      border-radius: 6px;
+      height: 10px;
+      width: 100%;
+      overflow: hidden;
+    }
+    .bar {
+      height: 10px;
+    }
+    .bar-pos { background: #2f855a; }
+    .bar-neg { background: #b45309; }
+    .highlight { color: var(--accent-2); font-weight: 700; }
+    .info-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #eef2f5;
+      border: none;
+      color: #6b7280;
+      font-size: 12px;
+      cursor: pointer;
+      padding: 0;
+      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.06);
+    }
+    .info-button::before { content: "i"; font-weight: 700; }
+    .tooltip {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    .tooltip-text {
+      position: absolute;
+      right: 0;
+      bottom: 26px;
+      background: #1f2a33;
+      color: #fff;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      white-space: nowrap;
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .tooltip:focus-within .tooltip-text,
+    .tooltip:hover .tooltip-text {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    @media print {
+      body { margin: 0.5in; background: #fff; }
+      header { background: #fff; }
+      table { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Drift Report</h1>
+    <p>Harmony Bridge system-agnostic drift analysis</p>
+  </header>
+  <main>
+    <div class="grid">
+      <div class="card">
+        <div class="label">Status</div>
+        <div class="status-pill status-pass">PASS</div>
+        <div class="muted">Why: n/a</div>
+        <div class="muted"></div>
+      </div>
+      <div class="card">
+        <div class="label">Run</div>
+        <div class="big">single_metric_drift_baseline</div>
+        <div class="muted">Baseline: single_metric_drift_baseline</div>
+      </div>
+      <div class="card">
+        <div class="label">Baseline Match</div>
+        <div class="big">HIGH (6/6)</div>
+        <div class="muted">scenario_id, operating_mode, environment, environment_fingerprint, sensor_config_id, input_data_version</div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div class="label">Decision Basis</div>
+          <span class="tooltip">
+            <button class="info-button" type="button" aria-label="Decision basis details"></button>
+            <span class="tooltip-text">n/a</span>
+          </span>
+        </div>
+        <div class="big">Decision basis: n/a</div>
+        <div class="muted">Context mismatch expected: no</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">Top Drivers</div>
+      <div class="big">none</div>
+      <div class="muted">Likely investigation areas: none</div>
+      <div class="muted">Baseline reason: last_pass | Warning: none</div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">What to do next</div>
+      <div class="big" style="margin-bottom:12px;">Primary issue: Missing metrics or data: missing current metric: cmapss_sensor_mean; missing current metric: cmapss_sensor_std; missing current metric: http_error_rate</div>
+      <div class="label" style="margin-top:12px;">Pinpoint &amp; suggested actions</div>
+      <div class="muted">No specific hints (PASS or no flagged metrics).</div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="section-title">Feedback</div>
+        <span class="tooltip">
+          <button class="info-button" type="button" aria-label="Feedback privacy details"></button>
+          <span class="tooltip-text">Sends anonymized decision metadata only (no logs or raw data).</span>
+        </span>
+      </div>
+      <div class="muted">Start the Local Feedback Service (runs only on your machine): <code>bin/hb feedback serve</code></div>
+      <div style="margin-top: 8px;">
+        <label><input id="feedback-optin" type="checkbox" /> Enable feedback sending</label>
+      </div>
+      <div class="muted">Sends anonymized decision metadata only (no logs or raw data).</div>
+      <div class="actions" style="margin-top: 10px;">
+        <button class="btn btn-primary" onclick="sendFeedback('accepted')">Correct</button>
+        <button class="btn btn-warn" onclick="sendFeedback('too_sensitive')">Too Sensitive</button>
+        <button class="btn btn-warn" onclick="sendFeedback('missed_severity')">Missed Severity</button>
+        <button class="btn btn-neutral" onclick="exportFeedback()">Export Feedback Summary</button>
+      </div>
+      <div style="margin-top: 8px;">
+        <label>Note:</label>
+        <input id="feedback-note" type="text" style="width: 60%;" />
+      </div>
+      <div style="margin-top: 6px;">
+        <label>Time to resolution (minutes):</label>
+        <input id="feedback-ttf" type="number" min="0" />
+      </div>
+      <div style="margin-top: 6px;">
+        <label>Access token (optional):</label>
+        <input id="feedback-token" type="password" />
+      </div>
+      <div id="feedback-status" class="muted" style="margin-top: 6px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Drift Metrics</div>
+      <table>
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Baseline</th>
+        <th>Current</th>
+        <th>Delta</th>
+        <th>Percent Change</th>
+        <th>Threshold</th>
+        <th>Percent Threshold</th>
+        <th>Unit</th>
+        <th>Severity</th>
+        <th>Why Flagged</th>
+      </tr>
+    </thead>
+    <tbody>
+      
+    </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Diff Visualization</div>
+      <table>
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Baseline</th>
+        <th>Current</th>
+        <th>Delta</th>
+        <th>Delta Magnitude</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td colspan="5">none</td></tr>
+    </tbody>
+      </table>
+      <div class="muted">Bar length shows relative delta magnitude across flagged metrics.</div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Distribution Drift</div>
+      <div class="muted">No distribution drift detected.</div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Drift Attribution</div>
+      <table>
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Direction</th>
+        <th>Effect</th>
+        <th>Baseline Stats</th>
+        <th>Current Stats</th>
+        <th>Onset</th>
+        <th>Sources</th>
+        <th>Decision</th>
+        <th>Evidence</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td colspan="9">none</td></tr>
+    </tbody>
+      </table>
+      <div class="muted">Legend: DRIFT = exceeds warn, below fail; FAIL = exceeds fail with persistence.</div>
+      <div class="muted">Drift attribution is statistical, not causal.</div>
+    </div>
+  </main>
+  <script>
+    const feedbackBase = {"hb_version": "dev", "source_type": "pba_excel", "metric": null, "decision": "PASS", "top_driver": null, "effect_size": null, "thresholds": {"warn": null, "percent": null, "persistence": null}};
+    const optinKey = 'hb_feedback_optin';
+    const optinCheckbox = document.getElementById('feedback-optin');
+    const storedOptin = localStorage.getItem(optinKey);
+    if (storedOptin !== null) {
+      optinCheckbox.checked = storedOptin === 'true';
+    }
+    optinCheckbox.addEventListener('change', () => {
+      localStorage.setItem(optinKey, optinCheckbox.checked ? 'true' : 'false');
+    });
+    function sendFeedback(action) {
+      if (!optinCheckbox.checked) {
+        document.getElementById('feedback-status').textContent = 'Enable feedback sending to submit.';
+        return;
+      }
+      const note = document.getElementById('feedback-note').value;
+      const ttf = document.getElementById('feedback-ttf').value;
+      const token = document.getElementById('feedback-token').value;
+      const headers = {'Content-Type': 'application/json'};
+      if (token) {
+        headers['X-HB-Token'] = token;
+      }
+      const payload = Object.assign({}, feedbackBase, {
+        operator_action: action,
+        operator_note: note || null,
+        time_to_resolution_minutes: ttf ? parseInt(ttf, 10) : null
+      });
+      fetch('http://127.0.0.1:8765/feedback', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(payload)
+      }).then(resp => resp.json()).then(data => {
+        document.getElementById('feedback-status').textContent = 'Feedback saved.';
+      }).catch(err => {
+        document.getElementById('feedback-status').textContent = 'Feedback failed (start server).';
+      });
+    }
+    function exportFeedback() {
+      const token = document.getElementById('feedback-token').value;
+      const headers = {};
+      if (token) {
+        headers['X-HB-Token'] = token;
+      }
+      fetch('http://127.0.0.1:8765/export?mode=summary', { headers }).then(resp => resp.json()).then(data => {
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'hb_feedback_summary.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        document.getElementById('feedback-status').textContent = 'Feedback summary downloaded.';
+      }).catch(() => {
+        document.getElementById('feedback-status').textContent = 'Export failed (start server).';
+      });
+    }
+  </script>
+</body>
+</html>

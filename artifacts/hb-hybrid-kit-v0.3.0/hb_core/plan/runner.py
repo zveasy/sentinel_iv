@@ -98,8 +98,6 @@ def run_plan(plan_path, out_dir, metric_registry, baseline_policy, asserts_dir=N
         redaction_policy = os.path.join(plan_dir, redaction_policy)
 
     os.makedirs(out_dir, exist_ok=True)
-    registry = load_metric_registry(metric_registry)
-    compare_plan = load_compare_plan(metric_registry)
     policy = load_baseline_policy(baseline_policy)
     distribution_enabled = policy.get("distribution_drift_enabled", True)
     deterministic = os.environ.get("HB_DETERMINISTIC", "0") == "1"
@@ -139,6 +137,9 @@ def run_plan(plan_path, out_dir, metric_registry, baseline_policy, asserts_dir=N
             run_meta = apply_redaction(redaction_policy, run_meta)
         baseline_rows = load_metrics_csv(baseline_dir)
         run_rows = load_metrics_csv(run_dir)
+        program = run_meta.get("program")
+        registry = load_metric_registry(metric_registry, program=program)
+        compare_plan = load_compare_plan(metric_registry, program=program)
 
         metrics_baseline = _metrics_struct(baseline_rows)
         metrics_current = _metrics_struct(run_rows)
