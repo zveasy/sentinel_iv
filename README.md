@@ -266,6 +266,12 @@ bin/hb ingest --source pba_excel samples/cases/no_drift_pass/current_source.csv 
 bin/hb run --source pba_excel samples/cases/no_drift_pass/current_source.csv --run-meta samples/cases/no_drift_pass/current_run_meta.json --stream
 ```
 
+Quick demo (drift in ~30 seconds):
+```
+./tools/demo.sh
+```
+Runs baseline then current from `samples/cases/single_metric_drift`, prints report paths and "what to do next," and opens the drift report in your browser. Use `./tools/demo.sh --no-open` to skip opening the browser. The report includes **investigation hints** and a **What to do next** section that pinpoints the top issue and suggested actions.
+
 Synthetic demo:
 ```
 python tools/make_synthetic_runs.py --baseline-count 3 --drift-count 3 --out samples/synthetic
@@ -353,6 +359,11 @@ Example Tags JSON in CSV:
 Metric,Baseline,Current,Delta,Threshold,Unit,Tags,Status
 avg_latency_ms,10,10,,,ms,"{""samples"":[9,10,10,11,9,10,10,11]}",
 ```
+
+Investigation hints and "What to do next":
+- Every drift report (HTML and JSON) includes a **What to do next** paragraph and per-metric **investigation hints**: pinpoint (one-sentence cause), suggested actions (e.g. re-baseline, check latency), and root-cause category (e.g. Drift threshold exceeded, Invariant violated).
+- The CLI prints a short "what to do next" line after each analyze so you see the summary in the terminal without opening the report.
+- See `Questions/q_and_a.md` for how drift, coverage, and verdicts are computed.
 
 Context-aware baseline fields:
 - `run_meta.json` can include `operating_mode`, `scenario_id`, `sensor_config_id`, `input_data_version`, and `environment_fingerprint`.

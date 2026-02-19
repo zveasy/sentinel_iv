@@ -90,6 +90,7 @@ If “give out commercially” includes a **hosted multi-tenant offering**, use 
 
 - In **README.md** and **LICENSE_COMMERCIAL.txt:** `[YEAR]`, `[COPYRIGHT HOLDER]`, `[JURISDICTION]`, and support/contact details.
 - In **docs/SUPPORT.md:** `[SUPPORT_EMAIL]`, `[SUPPORT_PORTAL_URL]`.
+- Run **`python tools/check_release_placeholders.py`** before packaging; it exits 1 if any of these placeholders remain in release/README, LICENSE_COMMERCIAL, or docs/SUPPORT.
 
 **Should-have soon after:**
 

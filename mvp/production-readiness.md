@@ -162,7 +162,7 @@ Concrete capabilities:
 One-line pitch:
 Harmony Bridge doesn't replace test tools; it provides early warning and readiness signals so programs don't discover risk at flight or delivery.
 
-## Tasks to Reach 100%
+## Tasks to Reach 100% (aligned with HB vNext above)
 
 Close remaining partials in current readiness:
 - [x] Version metric definitions + thresholds per program.
@@ -176,17 +176,17 @@ Close remaining partials in current readiness:
 - [x] Add monitoring hooks + support diagnostics.
 
 Build RITS-parity core:
-- [ ] Plan runner (`plans/*.yaml`, `hb plan run`).
-- [ ] Scenario modes (analyze-only + execute+analyze).
-- [ ] Deterministic asserts engine + evidence capture.
-- [ ] Unified decision model (PASS, PASS_WITH_DRIFT, FAIL, NO_TEST).
-- [ ] Artifact contract + filesystem adapter + one external adapter.
-- [ ] Requirements trace matrix export (CSV/JSON) + HTML rollup.
-- [ ] CI exit codes + result bundle (`hb bundle results/`).
+- [x] Plan runner (`plans/*.yaml`, `hb plan run`).
+- [x] Scenario modes (analyze-only + execute+analyze).
+- [ ] Evidence capture (values, timestamps, offending segments) for asserts.
+- [x] Unified decision model (PASS, PASS_WITH_DRIFT, FAIL, NO_TEST).
+- [x] Artifact contract + filesystem adapter + external adapter (Jenkins/VxWorks).
+- [x] Requirements trace matrix export (CSV/JSON) + HTML rollup.
+- [x] CI exit codes + result bundle (`hb bundle results/`).
 
 Beat RITS with trend intelligence:
-- [ ] Trend outputs (drift score over time, recurring drivers, stability score).
-- [ ] Baseline evolution (golden, last-known-good, rolling median/quantile).
+- [x] Trend outputs (drift score over time, recurring drivers, stability score).
+- [ ] Baseline evolution modes (golden, last-known-good, rolling median/quantile).
 
 PREWG readiness add-on (program-level value):
 - [ ] Gate definitions + criteria (Pre-CDR, Pre-Flight, Pre-Delivery, Regression Exit).
@@ -197,8 +197,8 @@ Production hardening for trust:
 - [x] Schema validation for `run_meta`, `signals`, `events`.
 - [x] Artifact schema versioning + migration notes.
 - [x] Redaction controls prior to report output.
-- [ ] Signed kit releases + integrity verification docs.
-- [ ] Threat model + local-only security posture doc.
+- [x] Signed kit releases + integrity verification docs (`docs/INTEGRITY_VERIFICATION.md`, `tools/release_checksums.py`).
+- [x] Threat model + local-only security posture doc (`docs/THREAT_MODEL_CUSTOMER.md`).
 
 ## 2–3 Week Closeout Plan (Tracked)
 
