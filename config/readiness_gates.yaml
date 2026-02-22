@@ -1,0 +1,41 @@
+# Program readiness gates (PREWG). Criteria for Ready / At Risk / Not Ready.
+# hb readiness gate --gate <name> evaluates using this config and registry/reports.
+
+version: "1.0"
+
+gates:
+  Pre-CDR:
+    description: "Ready for Critical Design Review"
+    criteria:
+      - id: no_recent_fail
+        type: no_fail_in_runs
+        params: { runs: 10 }
+      - id: baseline_set
+        type: baseline_tag_set
+        params: {}
+      - id: no_critical_drift
+        type: no_critical_metric_drift
+        params: { runs: 5 }
+  Pre-Flight:
+    description: "Ready for flight readiness"
+    extends: Pre-CDR
+    criteria:
+      - id: evidence_available
+        type: evidence_pack_if_fail
+        params: {}
+  Pre-Delivery:
+    description: "Ready for delivery"
+    extends: Pre-Flight
+    criteria:
+      - id: no_open_requests
+        type: no_open_baseline_requests
+        params: {}
+  Regression-Exit:
+    description: "Regression test exit criteria"
+    criteria:
+      - id: no_fail
+        type: no_fail_in_runs
+        params: { runs: 1 }
+      - id: baseline_set
+        type: baseline_tag_set
+        params: {}

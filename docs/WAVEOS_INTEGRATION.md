@@ -14,19 +14,20 @@ Harmony Bridge is intended to integrate with the WaveOS ecosystem as a platform 
 | HB → WaveOS | HB emits **health events** (e.g. on drift/FAIL): run_id, status, primary_issue, report path, severity. Transport: webhook, message bus, or shared event log. |
 | WaveOS → HB | WaveOS sends **policy updates**: baseline tag to use, optional threshold overrides, allowlist for metrics. HB reloads config or applies updates for the next run. |
 
-## Event Schema (TODO)
+## Event Schema
 
-- Define a **shared JSON schema** (or `.proto`) for:
-  - Health event: `ts`, `source`, `run_id`, `status`, `severity`, `primary_issue`, `report_path`, `drift_metrics[]`.
-  - Policy update: `ts`, `baseline_tag`, `threshold_overrides`, `metric_allowlist`.
-- Location: e.g. `schemas/waveos_events.json` or a shared repo.
+- A **shared JSON schema** is in `schemas/waveos_events.json`:
+  - **Health event:** `ts`, `source`, `run_id`, `status`, `severity`, `primary_issue`, `report_path`, `drift_metrics[]`.
+  - **Policy update:** `ts`, `baseline_tag`, `threshold_overrides`, `metric_allowlist`.
+- Extend or replace as needed when implementing the WaveOS adapter.
 
-## Adapter Module (TODO)
+## Adapter Module
 
-- Implement a **WaveOS adapter** module (e.g. `hb/adapters/waveos.py` or `waveos_adapter/`) that:
-  - Subscribes to or receives policy updates from WaveOS.
-  - Publishes health events to WaveOS (webhook or message bus).
-- Authentication: mTLS or API key; document in security posture.
+- **`hb/adapters/waveos.py`** implements:
+  - **`publish_health_event(webhook_url, event)`** — POSTs a health event (ts, source, run_id, status, severity, primary_issue, report_path, drift_metrics) to a WaveOS webhook. Use from daemon or after analyze to push drift/FAIL events.
+  - **`apply_policy_update(update)`** — Accepts a policy update (baseline_tag, threshold_overrides, metric_allowlist) and returns what would be applied; callers can persist to baseline_policy or metric_registry.
+- To push events from the daemon, set a webhook URL in config and call `publish_health_event` when status is FAIL or PASS_WITH_DRIFT (or use the existing alert webhook sink with WaveOS endpoint).
+- Authentication: add headers (e.g. API key) via the `headers` argument to `publish_health_event`; mTLS would require a custom opener (document in security posture).
 
 ## References
 

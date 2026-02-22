@@ -1,0 +1,25 @@
+[Unit]
+Description=Harmony Bridge daemon (continuous ingest + drift check)
+After=network.target
+
+[Service]
+Type=simple
+# Replace with actual install path and config
+ExecStart=/usr/bin/env python -m hb.cli daemon --config /opt/hb/config/daemon.yaml
+WorkingDirectory=/opt/hb
+Restart=always
+RestartSec=10
+User=hb
+Group=hb
+# Hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/hb/daemon_output /opt/hb/runs.db /opt/hb
+PrivateDevices=no
+CapabilityBoundingSet=
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

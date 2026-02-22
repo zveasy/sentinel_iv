@@ -12,7 +12,12 @@ def file_hash(path):
     return hasher.hexdigest()
 
 
-def write_artifact_manifest(report_dir, files):
+def write_artifact_manifest(report_dir, files, config_hashes=None, signing_key_version=None):
+    """
+    Write evidence manifest with sha256 for every artifact file.
+    config_hashes: optional dict label -> sha256 for config/metric_registry snapshots (DoD evidence chain).
+    signing_key_version: optional string for key rotation; record which key version signed this manifest.
+    """
     manifest = []
     for path in files:
         if not path or not os.path.exists(path):
@@ -23,6 +28,10 @@ def write_artifact_manifest(report_dir, files):
                 "sha256": file_hash(path),
             }
         )
+    if config_hashes:
+        manifest.append({"config_hashes": config_hashes})
+    if signing_key_version is not None:
+        manifest.append({"signing_key_version": signing_key_version})
     out_path = os.path.join(report_dir, "artifact_manifest.json")
     with open(out_path, "w") as f:
         json.dump(manifest, f, indent=2)
@@ -31,6 +40,15 @@ def write_artifact_manifest(report_dir, files):
     except OSError:
         pass
     return out_path
+
+
+def write_config_snapshot_hashes(metric_registry_path=None, baseline_policy_path=None):
+    """Return dict of config label -> sha256 for inclusion in evidence manifest."""
+    out = {}
+    for label, path in [("metric_registry", metric_registry_path), ("baseline_policy", baseline_policy_path)]:
+        if path and os.path.isfile(path):
+            out[label] = file_hash(path)
+    return out
 
 
 def _entry_hash(entry, prev_hash):
@@ -78,6 +96,8 @@ def verify_artifact_manifest(manifest_path):
         entries = json.load(f)
     issues = []
     for entry in entries:
+        if "config_hashes" in entry:
+            continue
         path = entry.get("path")
         expected = entry.get("sha256")
         if not path or not expected:

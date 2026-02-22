@@ -1,6 +1,6 @@
 # Harmony Bridge — Hybrid Kit
 
-**Copyright (c) [YEAR] [COPYRIGHT HOLDER].** See [License](#license) below.
+**Copyright (c) 2025 Sentinel-IV.** See [License](#license) below.
 
 Harmony Bridge compares run metrics to a baseline, detects drift, and produces reports so you can catch regressions and explain changes. This kit includes:
 
@@ -68,10 +68,10 @@ Then open http://127.0.0.1:8765 for the local UI.
 
 ## License
 
-- **Commercial use:** See **LICENSE_COMMERCIAL.txt**. Use this license when you have a commercial agreement or order form with [COPYRIGHT HOLDER].
+- **Commercial use:** See **LICENSE_COMMERCIAL.txt**. Use this license when you have a commercial agreement or order form with Sentinel-IV.
 - **Evaluation only:** See **LICENSE_EVAL.txt** for internal evaluation. No production use or redistribution under the eval license without a signed agreement.
 
-Replace `[COPYRIGHT HOLDER]` and `[YEAR]` with the actual vendor name and year before distribution.
+For white-label or resale distribution, replace vendor name and year in this README and in LICENSE_COMMERCIAL.txt with your company details.
 
 ---
 

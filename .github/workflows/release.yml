@@ -1,0 +1,36 @@
+# Run on push of version tags (e.g. v0.3.0). Build kit, generate SBOM, upload artifacts.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r hb/requirements.txt -r hb/requirements-dev.txt
+      - name: Generate SBOM
+        run: python tools/generate_sbom.py --out SBOM.md --from-installed
+      - name: Verify SBOM
+        run: python tools/verify_sbom.py SBOM.md
+      - name: Build kit with checksums
+        run: python tools/build_kit.py --checksums
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            SBOM.md
+            artifacts/*.zip
+            artifacts/*.sha256
+            artifacts/checksums.txt
+          if-no-files-found: warn

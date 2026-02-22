@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HB Alert Event",
+  "type": "object",
+  "properties": {
+    "ts": { "type": "string", "format": "date-time" },
+    "severity": { "type": "string", "enum": ["INFO", "WARN", "FAIL", "CRITICAL"] },
+    "status": { "type": "string" },
+    "run_id": { "type": "string" },
+    "primary_issue": { "type": "string" },
+    "report_path": { "type": "string" },
+    "drift_metrics": { "type": "array", "items": { "type": "object" } }
+  },
+  "required": ["ts", "severity", "status", "run_id"]
+}

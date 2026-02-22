@@ -1,4 +1,5 @@
 import yaml
+from datetime import datetime, timezone
 
 
 def load_asserts(path):
@@ -27,57 +28,41 @@ def _compare(op, actual, expected):
     raise ValueError(f"unsupported op: {op}")
 
 
-def evaluate_asserts(asserts, metrics_map):
+def evaluate_asserts(asserts, metrics_map, run_id=None):
+    """Evaluate assertion rules. Each result includes timestamp_utc and, on FAIL, offending_segment (RITS-style evidence capture)."""
     results = []
+    ts = datetime.now(timezone.utc).isoformat()
     for rule in asserts:
         rule_id = rule.get("id") or rule.get("name") or "assert"
         metric = rule.get("metric")
         op = rule.get("op")
         expected = rule.get("value")
         severity = (rule.get("severity") or "fail").lower()
+        base = {"id": rule_id, "metric": metric, "timestamp_utc": ts}
+        if run_id is not None:
+            base["run_id"] = run_id
         if not metric or not op:
-            results.append(
-                {
-                    "id": rule_id,
-                    "metric": metric,
-                    "status": "NO_TEST",
-                    "reason": "missing metric/op",
-                }
-            )
+            results.append({**base, "status": "NO_TEST", "reason": "missing metric/op"})
             continue
         actual = metrics_map.get(metric)
         if actual is None:
-            results.append(
-                {
-                    "id": rule_id,
-                    "metric": metric,
-                    "status": "NO_TEST",
-                    "reason": "metric missing",
-                }
-            )
+            results.append({**base, "status": "NO_TEST", "reason": "metric missing"})
             continue
         try:
             passed = _compare(op, actual, expected)
         except Exception as exc:
-            results.append(
-                {
-                    "id": rule_id,
-                    "metric": metric,
-                    "status": "NO_TEST",
-                    "reason": f"compare error: {exc}",
-                }
-            )
+            results.append({**base, "status": "NO_TEST", "reason": f"compare error: {exc}"})
             continue
         status = "PASS" if passed else "FAIL"
-        results.append(
-            {
-                "id": rule_id,
-                "metric": metric,
-                "op": op,
-                "expected": expected,
-                "actual": actual,
-                "severity": severity,
-                "status": status,
-            }
-        )
+        out = {
+            **base,
+            "op": op,
+            "expected": expected,
+            "actual": actual,
+            "severity": severity,
+            "status": status,
+        }
+        if status == "FAIL":
+            out["offending_segment"] = {"actual": actual, "expected": expected, "op": op, "metric": metric}
+        results.append(out)
     return results

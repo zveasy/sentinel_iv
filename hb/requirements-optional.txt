@@ -1,0 +1,8 @@
+# Optional dependencies for Harmony Bridge. Install with:
+#   pip install -r hb/requirements.txt -r hb/requirements-optional.txt
+# KMS key provider (hb/keys.py get_key_provider("kms"))
+boto3>=1.28
+# Vault key provider (hb/keys.py get_key_provider("vault"))
+hvac>=2.0
+# OpenTelemetry tracing (hb/tracing.py; spans in analyze path when installed)
+opentelemetry-api>=1.20

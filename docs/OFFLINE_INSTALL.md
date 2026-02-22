@@ -27,3 +27,12 @@ pip install --no-index --find-links=wheelhouse -r hb/requirements.txt -r hb/requ
 python hb/cli.py --help
 pytest -q
 ```
+
+## 4) Signed bundles (air-gapped)
+
+For air-gapped install from a signed release:
+
+1. On a connected machine, build the release kit (`python tools/build_kit.py`) and sign the zip (see `docs/GPG_SIGNING.md`).
+2. Transfer the signed zip and signature (or checksums) to the air-gapped environment via approved media.
+3. Verify the signature or checksums before extracting (see `docs/INTEGRITY_VERIFICATION.md`).
+4. Install from the extracted kit using the wheelhouse method above if dependencies are bundled, or from a pre-staged wheelhouse.

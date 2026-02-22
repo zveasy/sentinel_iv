@@ -1,0 +1,17 @@
+{
+  "description": "Golden expected output for compare_metrics with baseline and current below.",
+  "inputs": {
+    "baseline": { "T2": { "value": 100.0, "unit": "C" }, "P2": { "value": 1.0, "unit": null } },
+    "current": { "T2": { "value": 105.0, "unit": "C" }, "P2": { "value": 1.0, "unit": null } },
+    "registry_metrics": {
+      "T2": { "unit": "C", "drift_threshold": 3.0 },
+      "P2": { "unit": null, "drift_threshold": 0.5 }
+    }
+  },
+  "expected": {
+    "status": "PASS_WITH_DRIFT",
+    "drift_metric_names": ["T2"],
+    "fail_metric_names": [],
+    "num_warnings": 0
+  }
+}

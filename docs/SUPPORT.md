@@ -2,8 +2,8 @@
 
 ## How to get help
 
-- **Email:** [SUPPORT_EMAIL]
-- **Portal:** [SUPPORT_PORTAL_URL if applicable]
+- **Email:** support@sentinel-iv.example.com
+- **Portal:** https://support.sentinel-iv.example.com
 - **Documentation:** See the `docs/` folder in this kit and the main README.
 
 When opening a support request, please include:
@@ -39,4 +39,4 @@ Fix any reported issues (e.g. missing config, DB lock) and try again. If the pro
 
 ---
 
-**Placeholder:** Replace `[SUPPORT_EMAIL]` and `[SUPPORT_PORTAL_URL]` with your actual support contact and portal before distribution.
+For your distribution, replace the support email and portal URL above with your actual support contact.

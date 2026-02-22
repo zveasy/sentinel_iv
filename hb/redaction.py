@@ -15,10 +15,17 @@ def _mask_value(value, strategy):
     return value
 
 
-def apply_redaction(policy_path, run_meta):
+def apply_redaction(policy_path, run_meta, profile=None):
+    """
+    Apply redaction rules to run_meta. If profile is set, use policy["profiles"][profile]["redact"];
+    otherwise use policy["redact"]. Policy YAML may have: redact: {...} or profiles: { name: { redact: {...} } }.
+    """
     with open(policy_path, "r") as f:
-        policy = yaml.safe_load(f)
-    rules = policy.get("redact", {})
+        policy = yaml.safe_load(f) or {}
+    if profile and isinstance(policy.get("profiles"), dict) and profile in policy["profiles"]:
+        rules = policy["profiles"][profile].get("redact", {})
+    else:
+        rules = policy.get("redact", {})
     for field, strategy in rules.items():
         if "." in field:
             parts = field.split(".")

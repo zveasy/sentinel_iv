@@ -1,0 +1,17 @@
+# Daemon config for HIL testbed: MQTT ingest from mosquitto
+source: mqtt
+broker: tcp://mosquitto:1883
+topic: hb/metrics/#
+
+interval_sec: 60
+window_sec: 120
+baseline_tag: golden
+output_dir: /data/output
+db_path: /data/runs.db
+metric_registry: /app/metric_registry.yaml
+baseline_policy: /app/baseline_policy.yaml
+
+max_report_dir_mb: 100
+alert_sinks:
+  - stdout
+evidence_pack_on_fail: true

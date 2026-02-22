@@ -2,6 +2,10 @@
 
 All notable changes to Harmony Bridge are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+**Before each release:** Update the version and date below; add entries under Added/Changed/Fixed/Security as needed. See `docs/RELEASE_CHECKLIST.md`.
+
+---
+
 ## [Unreleased]
 
 - Commercial release packaging: EULA template, threat model doc, integrity verification, support doc, customer README.

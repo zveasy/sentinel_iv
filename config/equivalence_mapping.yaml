@@ -1,0 +1,13 @@
+# Baseline equivalence: map baseline (vendor A) metric names/scales to current (vendor B).
+# Apply when baseline was produced on a different platform. HB_EQUIVALENCE_MAPPING points here.
+
+version: "1.0"
+
+# Optional: source_platform / target_platform to apply only for that pair.
+mappings:
+  # - source_name: temp_c
+  #   target_name: temperature_celsius
+  #   scale: 1.0
+  #   offset: 0.0
+  #   source_platform: vendor_a
+  #   target_platform: vendor_b

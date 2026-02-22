@@ -1,0 +1,17 @@
+{{- if .Values.health.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sentinel-hb.fullname" . }}
+  labels:
+    {{- include "sentinel-hb.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.health.port | default 9090 }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "sentinel-hb.selectorLabels" . | nindent 4 }}
+{{- end }}

@@ -3,6 +3,7 @@ import os
 import yaml
 
 from hb.registry_utils import build_alias_index
+from hb.config_validation import reject_plaintext_secrets, should_reject_plaintext_secrets
 from hb_core.compare import ComparePlan
 
 _registry_cache = {}
@@ -37,8 +38,8 @@ def _normalize_baseline_policy(payload):
 def _validate_baseline_policy(policy):
     if not isinstance(policy, dict):
         raise ValueError("baseline_policy must be a mapping")
-    if policy.get("strategy") not in {"last_pass", "tag", "explicit"}:
-        raise ValueError("baseline_policy.strategy must be one of: last_pass, tag, explicit")
+    if policy.get("strategy") not in {"last_pass", "tag", "explicit", "rolling", "golden"}:
+        raise ValueError("baseline_policy.strategy must be one of: last_pass, tag, explicit, rolling, golden")
     if policy.get("fallback") not in {"latest", "none"}:
         raise ValueError("baseline_policy.fallback must be one of: latest, none")
     context_match = policy.get("context_match")
@@ -59,6 +60,7 @@ def _normalize_metric_registry(payload):
     metrics = registry.get("metrics") or {}
     registry["metrics"] = metrics
     registry.setdefault("programs", {})
+    registry.setdefault("mode_overrides", {})  # operating_mode -> { metrics: { name: config } }
     return registry
 
 
@@ -86,6 +88,9 @@ def _validate_metric_registry(registry):
     programs = registry.get("programs", {})
     if programs and not isinstance(programs, dict):
         raise ValueError("metric_registry.programs must be a mapping")
+    mode_overrides = registry.get("mode_overrides")
+    if mode_overrides is not None and not isinstance(mode_overrides, dict):
+        raise ValueError("metric_registry.mode_overrides must be a mapping")
     return registry
 
 
@@ -106,31 +111,54 @@ def _apply_program_overrides(registry, program):
     return merged
 
 
-def load_metric_registry(path, program=None):
+def _apply_mode_overrides(registry, operating_mode):
+    """Apply mode_overrides for operational_mode (e.g. nominal, degraded). Thresholds/invariants per mode."""
+    if not operating_mode:
+        return registry
+    mode_overrides = registry.get("mode_overrides") or {}
+    overrides = mode_overrides.get((operating_mode or "").strip().lower())
+    if not overrides:
+        return registry
+    merged = copy.deepcopy(registry)
+    metrics = merged.get("metrics") or {}
+    for metric, config in (overrides.get("metrics") or {}).items():
+        base = dict(metrics.get(metric) or {})
+        base.update(config or {})
+        metrics[metric] = base
+    merged["metrics"] = metrics
+    return merged
+
+
+def load_metric_registry(path, program=None, operating_mode=None):
     program = program or os.environ.get("HB_PROGRAM")
-    cache_key = (path, program)
+    operating_mode = operating_mode or os.environ.get("HB_OPERATING_MODE")
+    cache_key = (path, program, operating_mode)
     mtime = os.path.getmtime(path)
     cached = _registry_cache.get(cache_key)
     if cached and cached["mtime"] == mtime:
         return cached["registry"]
     with open(path, "r") as f:
         registry = yaml.safe_load(f) or {}
+    if should_reject_plaintext_secrets():
+        reject_plaintext_secrets(registry, "metric_registry")
     registry = _normalize_metric_registry(registry)
     registry = _apply_program_overrides(registry, program)
+    registry = _apply_mode_overrides(registry, operating_mode)
     _validate_metric_registry(registry)
     registry["alias_index"] = build_alias_index(registry)
     _registry_cache[cache_key] = {"mtime": mtime, "registry": registry}
     return registry
 
 
-def load_compare_plan(path, program=None):
+def load_compare_plan(path, program=None, operating_mode=None):
     program = program or os.environ.get("HB_PROGRAM")
-    cache_key = (path, program)
+    operating_mode = operating_mode or os.environ.get("HB_OPERATING_MODE")
+    cache_key = (path, program, operating_mode)
     mtime = os.path.getmtime(path)
     cached = _compare_plan_cache.get(cache_key)
     if cached and cached["mtime"] == mtime:
         return cached["plan"]
-    registry = load_metric_registry(path, program=program)
+    registry = load_metric_registry(path, program=program, operating_mode=operating_mode)
     plan = ComparePlan.compile(registry)
     _compare_plan_cache[cache_key] = {"mtime": mtime, "plan": plan}
     return plan
@@ -139,5 +167,7 @@ def load_compare_plan(path, program=None):
 def load_baseline_policy(path):
     with open(path, "r") as f:
         payload = yaml.safe_load(f) or {}
+    if should_reject_plaintext_secrets():
+        reject_plaintext_secrets(payload, "baseline_policy")
     policy = _normalize_baseline_policy(payload)
     return _validate_baseline_policy(policy)

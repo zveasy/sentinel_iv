@@ -1,0 +1,28 @@
+# Action policy: when to trigger which actions (closed loop).
+# Safety: never hard-shutdown unless two independent conditions (e.g. status FAIL + baseline_confidence < 0.3).
+
+version: "1.0"
+
+safety_gate:
+  require_two_conditions: true
+  critical_actions: [shutdown, abort]
+
+rules:
+  - status: [FAIL]
+    conditions: []
+    actions:
+      - type: notify
+        params: { sink: webhook }
+    safety_required: false
+  - status: [FAIL]
+    conditions: [{ key: baseline_confidence, op: "<", value: 0.3 }]
+    actions:
+      - type: degrade
+        params: { level: high }
+    safety_required: true
+  - status: [PASS_WITH_DRIFT]
+    conditions: []
+    actions:
+      - type: notify
+        params: { sink: file }
+    safety_required: false

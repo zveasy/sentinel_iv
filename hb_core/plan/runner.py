@@ -168,8 +168,9 @@ def run_plan(plan_path, out_dir, metric_registry, baseline_policy, asserts_dir=N
             base_dir = asserts_dir or plan_dir
             asserts_path = os.path.join(base_dir, asserts_path)
         assert_results = []
+        run_id = run_meta.get("run_id") or (f"{scenario_id}_{uuid.uuid4().hex[:6]}" if scenario_id else None)
         if asserts_path:
-            assert_results = evaluate_asserts(load_asserts(asserts_path), _metrics_map(run_rows))
+            assert_results = evaluate_asserts(load_asserts(asserts_path), _metrics_map(run_rows), run_id=run_id)
 
         status = _merge_status(drift_status, assert_results)
 

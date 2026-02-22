@@ -1,7 +1,14 @@
-# SBOM Placeholder
+# Software Bill of Materials (SBOM)
 
-This MVP does not ship a full SBOM yet. Use this file to track:
-- Python dependencies (see `hb/requirements.txt`)
-- Optional tools (wkhtmltopdf)
+Generate the full SBOM (package names and versions) by running:
 
-Next step: export SBOM via `pip-licenses` or `cyclonedx-bom` when needed.
+```bash
+# From repo root, with deps installed (e.g. in a venv):
+pip install -r hb/requirements.txt -r hb/requirements-dev.txt
+python tools/generate_sbom.py --out SBOM.md --from-installed
+```
+
+Without `--from-installed`, versions are taken from pinned requirements only. Include the generated `SBOM.md` (or equivalent) with each release for dependency and license review.
+
+- **Dependencies:** See `hb/requirements.txt` and `hb/requirements-dev.txt`.
+- **Optional tools:** wkhtmltopdf (for PDF reports).

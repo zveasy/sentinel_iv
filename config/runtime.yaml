@@ -1,0 +1,25 @@
+# Streaming runtime config: hb runtime --config config/runtime.yaml
+# True streaming evaluator: event-time, watermarks, sliding windows.
+
+source: file_replay  # or mqtt, syslog (same as daemon)
+path: ""             # for file_replay: path to telemetry.jsonl
+
+# Sliding window (seconds)
+window_size_sec: 10.0
+slide_sec: 1.0
+# max_buckets: 1000   # optional: cap window buckets to bound memory (evict oldest)
+
+# Event-time / watermarks
+allowed_lateness_sec: 60.0
+late_event_policy: drop  # drop | buffer | side_output
+
+# Paths for decision snapshot (config ref hashes)
+metric_registry: metric_registry.yaml
+baseline_policy: baseline_policy.yaml
+
+# Output
+output_dir: runtime_output
+db_path: runs.db
+
+# Latency metrics (p50/p95 decision time)
+latency_metrics: true

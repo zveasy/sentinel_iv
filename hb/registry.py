@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 import time
@@ -10,6 +11,7 @@ def init_db(path):
         os.makedirs(dir_name, exist_ok=True)
     conn = sqlite3.connect(path, timeout=10)
     conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS runs (
@@ -115,8 +117,62 @@ def init_db(path):
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS baseline_versions (
+            version_id TEXT PRIMARY KEY,
+            baseline_run_id TEXT NOT NULL,
+            source_run_ids TEXT,
+            created_at TEXT,
+            signature TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS action_ledger (
+            action_id TEXT PRIMARY KEY,
+            idempotency_key TEXT UNIQUE,
+            action_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            payload TEXT,
+            run_id TEXT,
+            decision_id TEXT,
+            created_at TEXT,
+            ack_at TEXT,
+            ack_payload TEXT,
+            retry_count INTEGER DEFAULT 0,
+            safety_gate_passed INTEGER,
+            dry_run INTEGER DEFAULT 0
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_action_ledger_idempotency ON action_ledger(idempotency_key)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_action_ledger_status ON action_ledger(status)")
+    cursor = conn.execute("PRAGMA table_info(baseline_lineage)")
+    lineage_cols = {row[1] for row in cursor.fetchall()}
+    if "baseline_confidence" not in lineage_cols:
+        conn.execute("ALTER TABLE baseline_lineage ADD COLUMN baseline_confidence REAL")
+    _ensure_custody_table(conn)
     conn.commit()
     return conn
+
+
+def _ensure_custody_table(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS custody_events (
+            event_id TEXT PRIMARY KEY,
+            case_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            ts_utc TEXT,
+            operator_id TEXT,
+            reason TEXT,
+            payload TEXT
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_custody_case_id ON custody_events(case_id)")
 
 
 def add_baseline_lineage(
@@ -129,6 +185,7 @@ def add_baseline_lineage(
     baseline_match_level,
     baseline_match_score,
     baseline_match_fields,
+    baseline_confidence=None,
 ):
     fields = ",".join(baseline_match_fields or [])
     created_at = datetime.now(timezone.utc).isoformat()
@@ -137,8 +194,8 @@ def add_baseline_lineage(
         """
         INSERT OR REPLACE INTO baseline_lineage
         (run_id, baseline_run_id, registry_hash, policy_hash, baseline_reason,
-         baseline_match_level, baseline_match_score, baseline_match_fields, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         baseline_match_level, baseline_match_score, baseline_match_fields, created_at, baseline_confidence)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             run_id,
@@ -150,6 +207,7 @@ def add_baseline_lineage(
             baseline_match_score,
             fields,
             created_at,
+            baseline_confidence,
         ),
     )
     conn.commit()
@@ -244,6 +302,7 @@ def _context_match(run_meta, candidate, fields):
 
 
 def select_baseline(conn, run_meta, policy, registry_hash=None):
+    strategy = policy.get("strategy") or "last_pass"
     tag = policy.get("tag")
     warn_on_mismatch = policy.get("warn_on_mismatch", False)
     context_fields = policy.get("context_match") or [
@@ -254,6 +313,20 @@ def select_baseline(conn, run_meta, policy, registry_hash=None):
         "sensor_config_id",
         "input_data_version",
     ]
+
+    # Baseline evolution: rolling = use latest baseline from baseline create (baseline_versions)
+    if strategy == "rolling":
+        cursor = conn.execute(
+            "SELECT baseline_run_id FROM baseline_versions ORDER BY created_at DESC LIMIT 1"
+        )
+        row = cursor.fetchone()
+        if row:
+            return row[0], "rolling", None, {"level": "ROLLING", "matched_fields": [], "score": 0, "possible": 0}
+        # fall through to last_pass if no baseline version
+
+    # golden = tag-based (same as tag)
+    if strategy == "golden" and not tag:
+        tag = "golden"
 
     if tag:
         cursor = conn.execute(
@@ -543,14 +616,210 @@ def run_exists(conn, run_id):
     return cursor.fetchone() is not None
 
 
-def list_runs(conn, limit=20):
+def list_runs(conn, limit=20, program=None):
+    """List recent runs; optional program filter for per-program (tenant) scope."""
+    if program is not None and program != "":
+        cursor = conn.execute(
+            """
+            SELECT run_id, status, program, subsystem, test_name, created_at
+            FROM runs
+            WHERE program = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (program, limit),
+        )
+    else:
+        cursor = conn.execute(
+            """
+            SELECT run_id, status, program, subsystem, test_name, created_at
+            FROM runs
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+    return cursor.fetchall()
+
+
+def list_runs_since(conn, since_utc: str):
+    """List run_id and created_at for runs created at or after since_utc (ISO)."""
     cursor = conn.execute(
         """
-        SELECT run_id, status, program, subsystem, test_name, created_at
-        FROM runs
+        SELECT run_id, created_at FROM runs
+        WHERE created_at >= ?
+        ORDER BY created_at ASC
+        """,
+        (since_utc,),
+    )
+    return cursor.fetchall()
+
+
+def add_baseline_version(conn, version_id: str, baseline_run_id: str, source_run_ids: list, signature: str = None):
+    created_at = datetime.now(timezone.utc).isoformat()
+    source_json = ",".join(source_run_ids) if isinstance(source_run_ids, list) else str(source_run_ids)
+    _execute_with_retry(
+        conn,
+        """
+        INSERT INTO baseline_versions (version_id, baseline_run_id, source_run_ids, created_at, signature)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (version_id, baseline_run_id, source_json, created_at, signature),
+    )
+    conn.commit()
+
+
+def list_baseline_versions(conn, limit=50):
+    cursor = conn.execute(
+        """
+        SELECT version_id, baseline_run_id, source_run_ids, created_at, signature
+        FROM baseline_versions
         ORDER BY created_at DESC
         LIMIT ?
         """,
         (limit,),
     )
     return cursor.fetchall()
+
+
+def get_baseline_version(conn, version_id: str):
+    cursor = conn.execute(
+        "SELECT version_id, baseline_run_id, source_run_ids, created_at, signature FROM baseline_versions WHERE version_id = ?",
+        (version_id,),
+    )
+    return cursor.fetchone()
+
+
+# --- Action ledger (closed-loop enforcement) ---
+
+
+def action_ledger_insert(
+    conn,
+    action_id,
+    action_type,
+    status,
+    payload=None,
+    run_id=None,
+    decision_id=None,
+    idempotency_key=None,
+    safety_gate_passed=None,
+    dry_run=0,
+):
+    created_at = datetime.now(timezone.utc).isoformat()
+    payload_str = json.dumps(payload) if payload is not None else None
+    _execute_with_retry(
+        conn,
+        """
+        INSERT INTO action_ledger
+        (action_id, idempotency_key, action_type, status, payload, run_id, decision_id, created_at, retry_count, safety_gate_passed, dry_run)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+        """,
+        (
+            action_id,
+            idempotency_key,
+            action_type,
+            status,
+            payload_str,
+            run_id,
+            decision_id,
+            created_at,
+            1 if safety_gate_passed else 0,
+            1 if dry_run else 0,
+        ),
+    )
+    conn.commit()
+
+
+def action_ledger_ack(conn, action_id, ack_payload=None):
+    ack_at = datetime.now(timezone.utc).isoformat()
+    ack_str = json.dumps(ack_payload) if ack_payload is not None else None
+    conn.execute(
+        "UPDATE action_ledger SET status = 'acked', ack_at = ?, ack_payload = ? WHERE action_id = ?",
+        (ack_at, ack_str, action_id),
+    )
+    conn.commit()
+
+
+def action_ledger_retry(conn, action_id):
+    conn.execute(
+        "UPDATE action_ledger SET retry_count = retry_count + 1 WHERE action_id = ?",
+        (action_id,),
+    )
+    conn.commit()
+
+
+def action_ledger_list(conn, status=None, limit=100):
+    if status:
+        cursor = conn.execute(
+            """
+            SELECT action_id, idempotency_key, action_type, status, payload, run_id, decision_id, created_at, ack_at, retry_count, dry_run
+            FROM action_ledger WHERE status = ? ORDER BY created_at DESC LIMIT ?
+            """,
+            (status, limit),
+        )
+    else:
+        cursor = conn.execute(
+            """
+            SELECT action_id, idempotency_key, action_type, status, payload, run_id, decision_id, created_at, ack_at, retry_count, dry_run
+            FROM action_ledger ORDER BY created_at DESC LIMIT ?
+            """,
+            (limit,),
+        )
+    rows = cursor.fetchall()
+    return [
+        {
+            "action_id": r[0],
+            "idempotency_key": r[1],
+            "action_type": r[2],
+            "status": r[3],
+            "payload": json.loads(r[4]) if r[4] else None,
+            "run_id": r[5],
+            "decision_id": r[6],
+            "created_at": r[7],
+            "ack_at": r[8],
+            "retry_count": r[9],
+            "dry_run": bool(r[10]),
+        }
+        for r in rows
+    ]
+
+
+def action_ledger_by_idempotency(conn, idempotency_key):
+    cursor = conn.execute(
+        "SELECT action_id, status FROM action_ledger WHERE idempotency_key = ?",
+        (idempotency_key,),
+    )
+    return cursor.fetchone()
+
+
+# --- Custody events (chain-of-custody) ---
+
+
+def custody_event_insert(conn, event_id, case_id, event_type, operator_id=None, reason=None, payload=None):
+    ts = datetime.now(timezone.utc).isoformat()
+    payload_str = json.dumps(payload) if payload is not None else None
+    conn.execute(
+        """
+        INSERT INTO custody_events (event_id, case_id, event_type, ts_utc, operator_id, reason, payload)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (event_id, case_id, event_type, ts, operator_id, reason, payload_str),
+    )
+    conn.commit()
+
+
+def custody_events_list(conn, case_id=None, limit=100):
+    if case_id:
+        cursor = conn.execute(
+            "SELECT event_id, case_id, event_type, ts_utc, operator_id, reason, payload FROM custody_events WHERE case_id = ? ORDER BY ts_utc DESC LIMIT ?",
+            (case_id, limit),
+        )
+    else:
+        cursor = conn.execute(
+            "SELECT event_id, case_id, event_type, ts_utc, operator_id, reason, payload FROM custody_events ORDER BY ts_utc DESC LIMIT ?",
+            (limit,),
+        )
+    return [
+        {"event_id": r[0], "case_id": r[1], "event_type": r[2], "ts_utc": r[3], "operator_id": r[4], "reason": r[5], "payload": json.loads(r[6]) if r[6] else None}
+        for r in cursor.fetchall()
+    ]

@@ -1,0 +1,40 @@
+# Daemon config: continuous ingest + periodic drift check.
+# hb daemon --config config/daemon.yaml
+
+source: file_replay  # or mqtt, syslog
+# For file_replay:
+path: ""  # set to path/to/telemetry.jsonl
+# For mqtt:
+broker: tcp://localhost:1883
+topic: hb/metrics/#
+# For syslog:
+# path: /dev/log  # or /var/log/syslog
+
+interval_sec: 300   # run drift check every N seconds
+window_sec: 300     # use last N seconds of telemetry as "current" window
+baseline_tag: golden
+output_dir: daemon_output
+db_path: runs.db
+metric_registry: metric_registry.yaml
+baseline_policy: baseline_policy.yaml
+telemetry_schema: config/telemetry_schema.yaml
+
+# Optional: disk caps (MB)
+max_report_dir_mb: 500
+max_audit_log_mb: 50
+
+# Optional: circuit breaker (skip cycle after N failures in window)
+# circuit_breaker:
+#   failure_threshold: 5
+#   window_sec: 60
+#   open_sec: 30
+
+# Alert sinks (Week 2): emit on drift/FAIL
+alert_sinks:
+  - stdout
+  # - file
+  # - webhook
+
+# Optional: auto-export evidence pack on FAIL, or for every run (e.g. HIL/SIL)
+evidence_pack_on_fail: true
+# evidence_pack_always: false  # set true to export evidence pack for every run

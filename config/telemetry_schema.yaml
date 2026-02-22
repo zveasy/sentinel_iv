@@ -1,0 +1,51 @@
+# Telemetry schema: map vendor-specific names and units to canonical metrics.
+# Used by hb normalize and live ingest (mqtt, syslog, file_replay).
+version: "1.0"
+
+sources:
+  mqtt:
+    topic_map:
+      # topic suffix or pattern -> default metric name if not in payload
+      "hb/metrics": null
+      "telemetry/#": null
+  syslog:
+    patterns: []
+
+# Map raw field names to canonical metric and optional unit conversion.
+# canonical: metric name matching metric_registry.yaml
+# factor: multiply value by this to get canonical unit (e.g. 0.001 for ms -> s)
+field_mapping:
+  avg_latency_ms:
+    canonical: avg_latency_ms
+    unit: ms
+  "Avg Task Latency (ms)":
+    canonical: avg_latency_ms
+    unit: ms
+  "Avg Latency (ms)":
+    canonical: avg_latency_ms
+    unit: ms
+  max_latency_ms:
+    canonical: max_latency_ms
+    unit: ms
+  "Max Task Latency (ms)":
+    canonical: max_latency_ms
+    unit: ms
+  reset_count:
+    canonical: reset_count
+  "Reset Count":
+    canonical: reset_count
+  watchdog_triggers:
+    canonical: watchdog_triggers
+  "Watchdog Triggers":
+    canonical: watchdog_triggers
+  error_code_frequency:
+    canonical: error_code_frequency
+  "Error Code Frequency":
+    canonical: error_code_frequency
+  # Unit conversions: source_unit -> factor to canonical
+  W:
+    canonical_unit: W
+    factor: 1
+  kW:
+    canonical_unit: W
+    factor: 1000

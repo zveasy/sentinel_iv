@@ -93,4 +93,25 @@ The repo is **demo-ready** (file-based ingest, analyze, report) but not yet **pi
 - **To be commercial (legal):** Replace all release placeholders, get legal review of the EULA, and set a real support contact.
 - **To be commercial (pilot):** Implement the 2-week sprint (connectors, daemon, baseline create/promote, alerting, evidence pack, resilience, install hardening) so the product can run 24h on a laptop with simulated telemetry and then on real hardware with low risk.
 
-**References:** `docs/COMMERCIAL_RELEASE_CHECKLIST.md`, `docs/PILOT_2WEEK_SPRINT.md`, `mvp/production-readiness.md`.
+---
+
+## What's next (implementation priorities)
+
+**1. Commercial ship (legal / trust)**  
+- Replace placeholders: `[YEAR]`, `[COPYRIGHT HOLDER]`, `[SUPPORT_EMAIL]`, `[SUPPORT_PORTAL_URL]` in `release/hb-hybrid-kit/README.md`, `LICENSE_COMMERCIAL.txt`, `docs/SUPPORT.md`.  
+- Legal review of EULA; set real support channel.  
+- Audit `artifacts/licenses.json` for commercial use; document.  
+- Optional: SBOM in release workflow; GPG signing of release zips.
+
+**2. Technical / product (soon after)**  
+- **Evidence capture for asserts:** values, timestamps, offending segments when assertions fail (RITS parity).  
+- **Performance guardrails:** streaming logs, bounded memory; document max file size and resource limits.  
+- **Baseline evolution modes:** golden, last-known-good, rolling median/quantile.  
+- **Governance closeout:** baseline approval workflow docs, config versioning script, invariant CI guard (see 2–3 week closeout in `mvp/production-readiness.md`).
+
+**3. Optional / follow-on**  
+- **PREWG:** Program readiness gates (Pre-CDR, Pre-Flight, etc.); see `docs/PREWG.md`.  
+- **WaveOS:** Event schema in `schemas/waveos_events.json`; adapter TODO in `docs/WAVEOS_INTEGRATION.md`.  
+- **SaaS/hosted:** Use checklist in `mvp/production-ready-commercial-saas.md` if offering a hosted product.
+
+**References:** `docs/COMMERCIAL_RELEASE_CHECKLIST.md`, `docs/PRODUCTION_READINESS_REVIEW.md`, `docs/PILOT_2WEEK_SPRINT.md`, `mvp/production-readiness.md`.

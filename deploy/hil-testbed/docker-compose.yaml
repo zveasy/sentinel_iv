@@ -1,0 +1,58 @@
+# HIL-style testbed: broker -> HB daemon -> WaveOS stub.
+# Sensor/telemetry can be file_replay (bind mount) or MQTT publisher (separate container).
+# Usage: from repo root, docker compose -f deploy/hil-testbed/docker-compose.yaml up
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$SYS/#", "-C", "1", "-W", "2"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  hb-daemon:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command: ["python", "hb/cli.py", "daemon", "--config", "/app/config/daemon.yaml"]
+    environment:
+      - PYTHONPATH=/app
+      - HB_DB_PATH=/data/runs.db
+    volumes:
+      - hil-data:/data
+      - ./daemon.yaml:/app/config/daemon.yaml:ro
+      - ../../metric_registry.yaml:/app/metric_registry.yaml:ro
+      - ../../baseline_policy.yaml:/app/baseline_policy.yaml:ro
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+
+  health:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command: ["python", "hb/cli.py", "health", "serve", "--port", "9090", "--bind", "0.0.0.0", "--db", "/data/runs.db"]
+    ports:
+      - "9090:9090"
+    volumes:
+      - hil-data:/data
+    depends_on:
+      - hb-daemon
+
+  waveos-stub:
+    image: python:3.12-slim
+    working_dir: /stub
+    command: ["python", "-u", "stub.py"]
+    volumes:
+      - ./waveos_stub.py:/stub/stub.py
+    environment:
+      - WAVEOS_STUB_ACK_DELAY_MS=0
+    # Optional: subscribe to HB actions topic and emit ACTION_ACK
+
+volumes:
+  hil-data: {}

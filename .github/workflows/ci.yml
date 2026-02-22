@@ -16,12 +16,27 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r hb/requirements.txt -r hb/requirements-dev.txt
+      - name: Release placeholder check
+        run: python tools/check_release_placeholders.py
+      - name: Dependency vulnerability scan
+        run: |
+          pip install pip-audit
+          pip-audit -r hb/requirements.txt -r hb/requirements-dev.txt
+      - name: SBOM generate and verify
+        run: |
+          python tools/generate_sbom.py --out SBOM.md --from-installed
+          python tools/verify_sbom.py SBOM.md
       - name: Baseline policy check
         run: python tools/ci/check_baseline_policy.py --policy baseline_policy.yaml
       - name: CMAPSS config guard
         run: python tools/ci/check_cmapss_config_usage.py --config configs/cmapss_fd003_thresholds.yaml --allow-regression
+      - name: Metric registry validation
+        run: python tools/validate_metric_registry.py --config metric_registry.yaml --require-version --require-invariants
       - name: Unit tests
         run: pytest -q
+      - name: Performance gate (compare benchmark)
+        run: |
+          timeout 25 python tools/benchmark_compare.py --runs 5 --metrics 200 --metric-registry metric_registry.yaml || (echo "Benchmark timed out or failed"; exit 1)
       - name: CMAPSS regression (optional)
         run: |
           if [ -n "${CMAPSS_ROOT:-}" ]; then

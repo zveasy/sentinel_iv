@@ -1,8 +1,21 @@
+# Baseline evolution modes:
+#   last_pass | tag | explicit | rolling | golden
+# - last_pass: use latest run that passed (context-matched).
+# - tag: use run_id pinned to the given tag (e.g. golden); set "tag: golden".
+# - golden: alias for tag with default tag "golden".
+# - rolling: use latest baseline from "hb baseline create --window" (baseline_versions table).
+# - explicit: (reserved for run_id in request/plan.)
+# Dual baseline: use golden for hard gates (pass/fail), rolling for early warning (optional).
+# When dual_baseline.use_golden_for_hard_gates is true, compare uses tag baseline for verdict.
+# When dual_baseline.use_rolling_for_early_warning is true, report can include drift vs rolling.
 baseline_policy:
   strategy: last_pass
   fallback: latest
   warn_on_mismatch: true
   tag:
+  dual_baseline:
+    use_golden_for_hard_gates: true
+    use_rolling_for_early_warning: false
   governance:
     require_approval: true
     approvals_required: 1

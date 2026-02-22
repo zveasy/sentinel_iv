@@ -1,0 +1,24 @@
+# Baseline quality gates: baseline is not just "tagged" — must pass acceptance criteria.
+# Baseline confidence score (0-1) is used in decisions (e.g. don't enforce hard actions with low confidence).
+
+version: "1.0"
+
+# When true, hb baseline set fails if acceptance criteria are not met (unless --skip-quality-gate).
+require_quality_gate: false
+
+acceptance_criteria:
+  min_sample_size: 10       # minimum runs in baseline window
+  min_time_in_state_sec: 3600  # minimum time window (e.g. 1h of data)
+  stability:
+    max_coefficient_of_variation: 0.5   # per-metric CV bound
+    exclude_metrics: []                 # metrics to skip for stability
+  no_unresolved_alerts: true           # no FAIL/alert in baseline window
+  min_environment_match_score: 0.7     # context match score threshold (0-1)
+
+# Confidence score: weighted combination of criteria (0-1)
+# Used by action policy: e.g. don't shutdown if baseline_confidence < 0.3
+confidence_weights:
+  sample_size: 0.2
+  stability: 0.3
+  no_alerts: 0.3
+  environment_match: 0.2

@@ -1,0 +1,11 @@
+apiVersion: v2
+name: sentinel-hb
+description: Sentinel HB daemon - continuous ingest and drift check
+type: application
+version: 0.1.0
+appVersion: "0.3.0"
+keywords:
+  - drift
+  - baseline
+  - health-monitoring
+maintainers: []
