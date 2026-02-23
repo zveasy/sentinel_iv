@@ -89,10 +89,11 @@ def run_daemon_cycle(config: dict, buffer: list, checkpoint: dict) -> tuple[str,
 
     run_id = f"daemon_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{len(buffer)}"
     import uuid as _uuid
+    # Program isolation: when HB_PROGRAM set, all runs and baseline selection are scoped to this program
     run_meta = {
         "run_id": run_id,
         "correlation_id": os.environ.get("HB_CORRELATION_ID") or str(_uuid.uuid4()),
-        "program": None,
+        "program": os.environ.get("HB_PROGRAM"),
         "toolchain": {"source_system": "daemon"},
         "timestamps": {"start_utc": "", "end_utc": datetime.now(timezone.utc).isoformat()},
         "build": {},
@@ -273,6 +274,33 @@ def daemon_main(config_path: str) -> None:
                 time.sleep(1)
                 continue
 
+            # Backpressure: if buffer exceeds max, apply drop/aggregate/degrade (deterministic + logged)
+            backpressure = config.get("backpressure") or {}
+            max_events = backpressure.get("max_events")
+            if max_events is not None and len(buffer) > max_events:
+                mode = backpressure.get("mode", "drop")
+                if mode == "drop":
+                    buffer = sorted(buffer, key=lambda e: e.get("_ts", 0))[-max_events:]
+                    print(f"daemon: backpressure drop, buffer trimmed to {len(buffer)}", file=sys.stderr)
+                elif mode == "aggregate":
+                    # Keep last value per (metric, window bucket); reduce to one event per metric per 10s bucket
+                    from collections import defaultdict
+                    buckets = defaultdict(dict)
+                    for e in buffer:
+                        m = e.get("metric") or e.get("name") or ""
+                        bucket = int(e.get("_ts", 0) // 10) * 10
+                        buckets[(m, bucket)][e.get("_ts", 0)] = e
+                    buffer = []
+                    for (m, b), by_ts in sorted(buckets.items()):
+                        if by_ts:
+                            buffer.append(max(by_ts.items(), key=lambda x: x[0])[1])
+                    buffer = buffer[-max_events:]
+                    print(f"daemon: backpressure aggregate, buffer reduced to {len(buffer)}", file=sys.stderr)
+                elif mode == "degrade":
+                    # Reduce metric set: keep only first N metrics (from config or 50)
+                    allowed = set(list({e.get("metric") or e.get("name") for e in buffer if (e.get("metric") or e.get("name"))})[: backpressure.get("max_metrics", 50)])
+                    buffer = [e for e in buffer if (e.get("metric") or e.get("name")) in allowed][-max_events:]
+                    print(f"daemon: backpressure degrade, metrics reduced to {len(allowed)}, buffer {len(buffer)}", file=sys.stderr)
             # Prune buffer to window
             cutoff = now - window_sec
             buffer = [e for e in buffer if e.get("_ts", 0) >= cutoff]

@@ -36,6 +36,7 @@ class StreamingEvaluator:
         metric_registry_path: str | None = None,
         baseline_policy_path: str | None = None,
         max_buckets: int | None = None,
+        deterministic_mode: bool = False,
     ):
         self.window_spec = window_spec
         self.clock = EventTimeClock(watermark_policy or WatermarkPolicy())
@@ -44,6 +45,7 @@ class StreamingEvaluator:
         self.metric_registry_path = metric_registry_path
         self.baseline_policy_path = baseline_policy_path
         self.latency = LatencyRecorder()
+        self.deterministic_mode = deterministic_mode
 
     def process_event(self, event: dict[str, Any]) -> str:
         """
@@ -81,7 +83,9 @@ class StreamingEvaluator:
         if not current:
             return None
         # current is metric -> value; compare_fn expects metric -> {value, unit, tags}
-        current_struct = {m: {"value": v, "unit": "", "tags": ""} for m, v in current.items() if v is not None}
+        # In deterministic_mode use sorted keys so output order is reproducible
+        items = sorted(current.items()) if self.deterministic_mode else current.items()
+        current_struct = {m: {"value": v, "unit": "", "tags": ""} for m, v in items if v is not None}
         if not current_struct:
             return None
 
@@ -110,6 +114,11 @@ class StreamingEvaluator:
         if window_start is None and self.aggregator._buckets:
             window_start = max(self.aggregator._buckets.keys())
 
+        # Deterministic mode: fixed ordering for reproducible outputs
+        if self.deterministic_mode:
+            drift_metrics = sorted(drift_metrics) if drift_metrics and isinstance(drift_metrics[0], str) else drift_metrics
+            fail_metrics = sorted(fail_metrics) if fail_metrics else []
+            invariant_violations = sorted(invariant_violations) if invariant_violations and isinstance(invariant_violations[0], str) else invariant_violations
         snapshot = DecisionSnapshot(
             decision_id=decision_id,
             ts_utc=datetime.now(timezone.utc).isoformat(),

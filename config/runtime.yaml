@@ -1,10 +1,15 @@
 # Streaming runtime config: hb runtime --config config/runtime.yaml
 # True streaming evaluator: event-time, watermarks, sliding windows.
 
+# Deterministic mode: fixed window sizes, no dynamic allocation, deterministic ordering.
+# Required for safety-critical and auditability (reproducible outputs across runs).
+runtime:
+  deterministic_mode: false  # set true for hard guarantee mode
+
 source: file_replay  # or mqtt, syslog (same as daemon)
 path: ""             # for file_replay: path to telemetry.jsonl
 
-# Sliding window (seconds)
+# Sliding window (seconds). In deterministic_mode use fixed values (no runtime change).
 window_size_sec: 10.0
 slide_sec: 1.0
 # max_buckets: 1000   # optional: cap window buckets to bound memory (evict oldest)
@@ -23,3 +28,9 @@ db_path: runs.db
 
 # Latency metrics (p50/p95 decision time)
 latency_metrics: true
+
+# Time sync (optional): clock skew and tolerance. See config/time.yaml for full options.
+# time:
+#   max_clock_skew_ms: 50
+#   resync_policy: warn  # warn | adjust | fail
+#   tolerance_window_sec: 5.0

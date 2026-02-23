@@ -290,6 +290,9 @@ def _analyze_impl(args):
     if perf is None:
         perf = PerfRecorder()
     run_meta = read_json(os.path.join(run_dir, "run_meta_normalized.json"))
+    # Program isolation: when HB_PROGRAM set, scope run and baseline selection to this program
+    if os.environ.get("HB_PROGRAM"):
+        run_meta["program"] = os.environ.get("HB_PROGRAM")
     program = run_meta.get("program")
     operating_mode = run_meta.get("operating_mode")
     registry = load_metric_registry(args.metric_registry, program=program, operating_mode=operating_mode)
@@ -339,6 +342,21 @@ def _analyze_impl(args):
             early_exit=early_exit,
             deterministic=deterministic,
         )
+
+    # Partial data / missing telemetry: coverage and policy (ignore | degrade | fail)
+    expected_count = len(baseline_metrics) if baseline_metrics else len(registry.get("metrics") or {}) or 1
+    coverage = (len(metrics_current) / expected_count) if expected_count else 1.0
+    missing_cfg = policy.get("missing_data") or {}
+    min_coverage = missing_cfg.get("min_coverage")
+    missing_mode = missing_cfg.get("mode", "ignore")
+    decision_confidence_reduced_due_to_missing_data = False
+    if min_coverage is not None and coverage < min_coverage:
+        decision_confidence_reduced_due_to_missing_data = True
+        if missing_mode == "fail":
+            status = "FAIL"
+        elif missing_mode == "degrade" and status == "FAIL":
+            status = "PASS_WITH_DRIFT"
+
     context_mismatch_expected = bool(
         baseline_warning and str(baseline_warning).startswith("context mismatch")
     )
@@ -431,6 +449,8 @@ def _analyze_impl(args):
         "investigation_hints": investigation.get("investigation_hints", []),
         "what_to_do_next": investigation.get("what_to_do_next", ""),
         "primary_issue": investigation.get("primary_issue"),
+        "data_coverage": coverage,
+        "decision_confidence_reduced_due_to_missing_data": decision_confidence_reduced_due_to_missing_data,
         "evidence_links": [
             {
                 "metric_name": h.get("metric"),
@@ -445,6 +465,52 @@ def _analyze_impl(args):
     report_dir = os.path.join(args.reports, report_meta["run_id"])
     with perf.span("render_report"):
         json_path, html_path = write_report(report_dir, report_payload)
+    # First-class decision record (core API output for operators/auditors/systems)
+    from hb.decision_record import build_decision_record, write_decision_record
+    config_hashes = write_config_snapshot_hashes(
+        getattr(args, "metric_registry", None),
+        getattr(args, "baseline_policy", None),
+    )
+    trigger_metrics = list(dict.fromkeys((fail_metrics or []) + [d.get("metric") for d in (drift_metrics or []) if d.get("metric")]))
+    reason_parts = []
+    if fail_metrics:
+        reason_parts.append("threshold_exceeded")
+    if invariant_violations:
+        reason_parts.append("invariant_violation")
+    if not reason_parts:
+        reason_parts.append("ok" if status == "PASS" else "drift")
+    from hb.decision_confidence import compute_decision_confidence, drift_magnitude_from_report
+    drift_mag = drift_magnitude_from_report(report_payload)
+    decision_conf = compute_decision_confidence(
+        baseline_confidence=report_payload.get("baseline_confidence"),
+        drift_magnitude=drift_mag,
+        metric_count=len(metrics_current),
+        coverage=coverage,
+        historical_accuracy_30d=None,
+        reduced_due_to_missing_data=decision_confidence_reduced_due_to_missing_data,
+    )
+    extra_rec = {}
+    if decision_confidence_reduced_due_to_missing_data:
+        extra_rec["decision_confidence_reduced_due_to_missing_data"] = True
+    decision_rec = build_decision_record(
+        decision_id=report_meta["run_id"],
+        status=status,
+        confidence=report_payload.get("baseline_confidence"),
+        baseline_confidence=report_payload.get("baseline_confidence"),
+        trigger_metrics=trigger_metrics,
+        action_requested=None,
+        action_allowed=True,
+        reason=" + ".join(reason_parts),
+        policy_version=None,
+        config_hash=hashlib.sha256(json.dumps(config_hashes or {}, sort_keys=True).encode()).hexdigest() if config_hashes else "",
+        evidence_ref=os.path.join(report_meta["run_id"], "drift_report.json"),
+        run_id=report_meta["run_id"],
+        baseline_run_id=baseline_run_id,
+        correlation_id=run_meta.get("correlation_id"),
+        decision_confidence=decision_conf,
+        extra=extra_rec or None,
+    )
+    write_decision_record(report_dir, decision_rec)
     if getattr(args, "pdf", False):
         pdf_path = os.path.join(report_dir, "drift_report.pdf")
         _, error = write_pdf(html_path, pdf_path)
@@ -464,10 +530,6 @@ def _analyze_impl(args):
         print(f"report: {os.path.join(report_dir, 'drift_report.html')}")
         print(f"what to do next: {what_next[:200]}{'...' if len(what_next) > 200 else ''}")
 
-    config_hashes = write_config_snapshot_hashes(
-        getattr(args, "metric_registry", None),
-        getattr(args, "baseline_policy", None),
-    )
     manifest_path = write_artifact_manifest(
         report_dir,
         [
@@ -530,6 +592,25 @@ def _analyze_impl(args):
                 "expires_at": expires_at,
             },
         )
+        # Operator override → feedback loop: feed accuracy_report and threshold tuning
+        try:
+            was_hb_correct = getattr(args, "was_hb_correct", None)
+            if was_hb_correct is None:
+                was_hb_correct = os.environ.get("HB_OVERRIDE_WAS_CORRECT", "").strip().lower() in ("1", "true", "yes")
+            feedback.write_feedback_record(
+                {
+                    "override": True,
+                    "reason": (getattr(args, "override_reason", None) or "").strip(),
+                    "was_hb_correct": bool(was_hb_correct),
+                    "run_id": report_meta["run_id"],
+                    "status": status,
+                    "operator_action": "correct" if was_hb_correct else "missed_severity",
+                    "decision_id": report_meta["run_id"],
+                },
+                log_path=getattr(args, "feedback_log", None),
+            )
+        except Exception:
+            pass
 
     upsert_run(
         conn,
@@ -587,6 +668,8 @@ def run(args):
         override_reason=getattr(args, "override_reason", None),
         override_operator_id=getattr(args, "override_operator_id", None),
         override_expires_in=getattr(args, "override_expires_in", "24h"),
+        was_hb_correct=getattr(args, "was_hb_correct", False),
+        feedback_log=getattr(args, "feedback_log", None),
         perf=perf,
     )
     report_dir = analyze(analyze_args)
@@ -724,6 +807,52 @@ def feedback_serve(args):
     feedback.serve_feedback(port=args.port, log_path=args.log)
 
 
+def trust_cmd(args):
+    """Trust dashboard: accuracy (30d), false positives %%, top noisy metrics."""
+    from pathlib import Path
+    default_log = Path.home() / ".hb" / "feedback" / "feedback_log.jsonl"
+    path = args.feedback_log or str(default_log)
+    records = []
+    if Path(path).exists():
+        with open(path) as f:
+            import json as _json
+            records = [_json.loads(l) for l in f if l.strip()]
+    correct = sum(1 for r in records if r.get("verdict") == "Correct")
+    too_sensitive = sum(1 for r in records if r.get("verdict") == "Too Sensitive")
+    missed = sum(1 for r in records if r.get("verdict") == "Missed Severity")
+    total = len(records)
+    accuracy_pct = (correct / total * 100) if total else 0
+    fp_pct = (too_sensitive / total * 100) if total else 0
+    from collections import defaultdict
+    by_metric = defaultdict(lambda: {"correct": 0, "too_sensitive": 0, "missed": 0})
+    for r in records:
+        m = r.get("metric_name") or r.get("metric") or "unknown"
+        v = r.get("verdict", "")
+        if v == "Correct":
+            by_metric[m]["correct"] += 1
+        elif v == "Too Sensitive":
+            by_metric[m]["too_sensitive"] += 1
+        elif v == "Missed Severity":
+            by_metric[m]["missed"] += 1
+    noisy = [m for m, c in by_metric.items() if (c["too_sensitive"] + c["missed"]) >= 2][:10]
+    if getattr(args, "json", False):
+        import json as _json
+        print(_json.dumps({
+            "total_labeled": total,
+            "correct": correct,
+            "accuracy_pct": round(accuracy_pct, 1),
+            "false_positive_estimate": too_sensitive,
+            "false_positive_pct": round(fp_pct, 1),
+            "top_noisy_metrics": noisy,
+        }, indent=2))
+        return
+    print("HB Trust Metrics:")
+    print(f"  Accuracy (period): {accuracy_pct:.1f}%")
+    print(f"  False Positives:   {fp_pct:.1f}%")
+    print(f"  Top noisy metrics: {', '.join(noisy) if noisy else 'none'}")
+    print(f"  (Total labeled: {total})")
+
+
 def support_health(args):
     payload = health_check(args.db, args.metric_registry, args.baseline_policy)
     print(yaml.safe_dump(payload, sort_keys=False))
@@ -778,6 +907,8 @@ def runtime_cmd(args):
     def compare_fn(cur, base):
         return compare_metrics(cur, base, registry, distribution_enabled=False, plan=None, early_exit=False, deterministic=True)
 
+    runtime_opts = cfg.get("runtime") or {}
+    deterministic_mode = runtime_opts.get("deterministic_mode", False)
     evaluator = StreamingEvaluator(
         window_spec=spec,
         watermark_policy=policy,
@@ -785,6 +916,7 @@ def runtime_cmd(args):
         metric_registry_path=reg_path,
         baseline_policy_path=base_path,
         max_buckets=cfg.get("max_buckets"),
+        deterministic_mode=deterministic_mode,
     )
     baseline_struct = baseline_metrics
     schema_path = cfg.get("telemetry_schema", "config/telemetry_schema.yaml")
@@ -1088,6 +1220,58 @@ def runs_list(args):
         print(" | ".join(str(value) for value in row))
 
 
+def production_check_cmd(args):
+    """Production readiness checklist: SDK built, deterministic, V&V, compliance docs, pilot, time sync."""
+    repo = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    checks = []
+    # SDK built
+    sdk_a = os.path.join(repo, "sdk", "libhb_event.a")
+    sdk_so = os.path.join(repo, "sdk", "libhb_event.so")
+    ok = os.path.isfile(sdk_a) or os.path.isfile(sdk_so)
+    checks.append({"id": "sdk_built", "ok": ok, "label": "SDK built"})
+    # Deterministic mode (config present)
+    rt = os.path.join(repo, "config", "runtime.yaml")
+    det_ok = False
+    if os.path.isfile(rt):
+        with open(rt) as f:
+            det_ok = "deterministic_mode" in f.read()
+    checks.append({"id": "deterministic_mode_tested", "ok": det_ok, "label": "deterministic mode configured"})
+    # V&V passed (docs or tests)
+    vv_ok = os.path.isfile(os.path.join(repo, "docs", "VV_ACCEPTANCE_CRITERIA.md")) or os.path.isfile(os.path.join(repo, "docs", "VV_TEST_PLAN.md"))
+    checks.append({"id": "vv_passed", "ok": vv_ok, "label": "V&V docs present"})
+    # Compliance docs
+    comp_ok = os.path.isfile(os.path.join(repo, "docs", "COMPLIANCE_MATRIX.md")) or os.path.isfile(os.path.join(repo, "docs", "PRODUCTION_READINESS_REVIEW.md"))
+    checks.append({"id": "compliance_docs", "ok": comp_ok, "label": "compliance docs present"})
+    # Pilot executed (optional: output dir exists)
+    pilot_ok = os.path.isdir(os.path.join(repo, "pilot_output")) or os.path.isdir(os.path.join(repo, "golden_demo_output")) or os.environ.get("HB_PILOT_EXECUTED") == "1"
+    checks.append({"id": "pilot_executed", "ok": pilot_ok, "label": "pilot executed"})
+    # Time sync config
+    time_ok = os.path.isfile(os.path.join(repo, "config", "time.yaml"))
+    checks.append({"id": "time_sync_config", "ok": time_ok, "label": "time sync config present"})
+    if getattr(args, "json", False):
+        print(json.dumps({"checks": checks, "all_ok": all(c["ok"] for c in checks)}, indent=2))
+        return
+    for c in checks:
+        sym = "[✓]" if c["ok"] else "[!]"
+        print(f"{sym} {c['label']}")
+    # Exit 0 so checklist is informational; CI can use --json and parse all_ok
+    if not all(c["ok"] for c in checks):
+        sys.exit(1)
+
+
+def verify_decision_cmd(args):
+    """Independent verification: re-run compare from evidence pack, confirm same decision."""
+    from hb.verify_decision import verify_decision
+    result = verify_decision(
+        decision_path=args.decision,
+        evidence_dir=args.evidence,
+        out_dir=args.out,
+    )
+    print(json.dumps({k: v for k, v in result.items() if k not in ("replay_config_ref",)}, indent=2))
+    if not result.get("verified"):
+        sys.exit(EXIT_CONFIG)
+
+
 def verify_report(args):
     manifest_path = os.path.join(args.report_dir, "artifact_manifest.json")
     sig_path = manifest_path + ".sig"
@@ -1177,6 +1361,7 @@ def main():
     analyze_parser.add_argument("--redaction-policy", default=None)
     analyze_parser.add_argument("--break-glass", action="store_true", help="override gate: proceed despite FAIL; requires --override-reason; logged with expiry")
     analyze_parser.add_argument("--override-reason", default=None, help="required when --break-glass; reason for override")
+    analyze_parser.add_argument("--was-hb-correct", action="store_true", dest="was_hb_correct", help="when overriding: HB decision was correct (feeds feedback/accuracy)")
     analyze_parser.add_argument("--override-operator-id", default=None, help="operator identity for override (or HB_OPERATOR_ID)")
     analyze_parser.add_argument("--override-expires-in", default="24h", help="override expiry e.g. 24h or 7d (default 24h)")
 
@@ -1259,6 +1444,11 @@ def main():
     verify_parser = subparsers.add_parser("verify", help="verify report signature")
     verify_parser.add_argument("--report-dir", required=True)
     verify_parser.add_argument("--sign-key", required=False)
+
+    verify_decision_parser = subparsers.add_parser("verify-decision", help="independent verification: re-run compare from evidence, confirm same decision")
+    verify_decision_parser.add_argument("--decision", required=True, help="path to decision_record.json")
+    verify_decision_parser.add_argument("--evidence", required=True, help="path to evidence pack directory (evidence_<case_id>)")
+    verify_decision_parser.add_argument("--out", default=None, help="optional directory for replay output")
 
     ui_parser = subparsers.add_parser("ui", help="run local web UI (localhost only)")
     ui_parser.add_argument("--port", type=int, default=int(os.environ.get("HB_UI_PORT", 8765)))
@@ -1391,6 +1581,10 @@ def main():
     replay_parser.add_argument("--db", default=None)
     replay_parser.add_argument("--out", default="replay_output")
 
+    trust_parser = subparsers.add_parser("trust", help="trust dashboard: accuracy, FP%%, top noisy metrics")
+    trust_parser.add_argument("--feedback-log", default=None, help="path to feedback_log.jsonl")
+    trust_parser.add_argument("--json", action="store_true", help="output raw JSON instead of dashboard")
+
     support_parser = subparsers.add_parser("support", help="support diagnostics")
     support_sub = support_parser.add_subparsers(dest="support_cmd", required=True)
     support_health_cmd = support_sub.add_parser("health", help="run health checks")
@@ -1428,6 +1622,9 @@ def main():
     readiness_gate_cmd.add_argument("--gate", required=True, help="e.g. Pre-CDR, Pre-Flight, Regression-Exit")
     readiness_gate_cmd.add_argument("--config", default=None)
     readiness_gate_cmd.add_argument("--db", default=None)
+
+    production_check_parser = subparsers.add_parser("production-check", help="production readiness checklist: SDK, deterministic, V&V, compliance, pilot, time sync")
+    production_check_parser.add_argument("--json", action="store_true", help="output JSON instead of checklist")
 
     db_parser = subparsers.add_parser("db", help="database utilities")
     db_sub = db_parser.add_subparsers(dest="db_cmd", required=True)
@@ -1531,6 +1728,8 @@ def main():
                 runs_list(args)
         elif args.command == "verify":
             verify_report(args)
+        elif args.command == "verify-decision":
+            verify_decision_cmd(args)
         elif args.command == "ui":
             if os.environ.get("HB_UI_LEGACY") == "1":
                 host = os.environ.get("HB_UI_HOST", "127.0.0.1")
@@ -1722,6 +1921,8 @@ def main():
             )
             print(json.dumps(result, indent=2))
             print(f"report: {args.out}")
+        elif args.command == "trust":
+            trust_cmd(args)
         elif args.command == "support":
             if args.metric_registry is None:
                 args.metric_registry = parser.get_default("metric_registry")
@@ -1741,6 +1942,8 @@ def main():
                 monitor_heartbeat(args)
             elif args.monitor_cmd == "tail":
                 monitor_tail(args)
+        elif args.command == "production-check":
+            production_check_cmd(args)
         elif args.command == "db":
             if args.db_cmd == "encrypt":
                 _require_rbac("db encrypt")

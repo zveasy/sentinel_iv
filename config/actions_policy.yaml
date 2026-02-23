@@ -1,11 +1,29 @@
 # Action policy: when to trigger which actions (closed loop).
 # Safety: never hard-shutdown unless two independent conditions (e.g. status FAIL + baseline_confidence < 0.3).
+# Decision authority: confidence and multi-signal gating (see docs/DECISION_AUTHORITY.md).
 
 version: "1.0"
 
 safety_gate:
   require_two_conditions: true
   critical_actions: [shutdown, abort]
+
+# Optional: require min confidence and multiple flagged metrics for critical actions
+decision_authority:
+  min_confidence: 0.0
+  min_baseline_confidence: 0.0
+  min_metrics_for_critical: 2
+  time_persistence_cycles: 0
+
+# Fail-safe: when true, no shutdown/abort (only observe/notify). Set in ops when timing SLO missed.
+fail_safe_on_timing: false
+
+# Action tier enforcement (see docs/ACTION_TIERS.md)
+# max_allowed_tier: 3   # default None = allow all; set 0-2 to cap
+# require_two_man_for_tier3: true   # Tier 3 requires approval_token or second_approver_id in context
+# min_baseline_confidence_for_critical: 0.8   # block Tier 3 if baseline_confidence < this
+# Safe mode: no Tier 3, only notify. Set when SLO breach / baseline confidence collapse / instability.
+# hb_mode: normal   # normal | safe
 
 rules:
   - status: [FAIL]

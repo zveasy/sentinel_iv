@@ -21,14 +21,19 @@ Virtual simulation tools validate logic correctness but cannot observe real hard
 
 Sentinel-IV(TM) is a passive, non-intrusive verification platform that integrates with existing DoD test environments.
 
-Core capabilities:
-- Automatic reduction of raw test telemetry into a small, predefined set of health metrics
-- Baseline comparison against last known-good hardware runs
-- Detection of behavioral drift even when tests pass
-- Generation of standardized artifacts (reports, Excel summaries, audit logs)
-- Commit-to-test traceability for configuration accountability
+Core capabilities (current implementation):
+- **Ingest:** File (CSV, Excel/PBA, NASA TSV, SMAP/MSL, CMAPSS, custom) and live (MQTT, syslog, Kafka, file-replay)
+- **Analysis:** Drift detection (threshold + percent), invariants, optional distribution drift (KS); compare two artifacts with optional auto-schema
+- **Baseline:** Governance (set/list/request/approve), quality gates, confidence score, decay detection, dual (golden + rolling) baseline, equivalence mapping for cross-vendor portability
+- **Streaming & runtime:** Event-time processing, sliding windows, decision snapshots, latency recording; `hb runtime` and daemon with checkpoints and circuit breaker
+- **Actions:** Policy-driven (notify, degrade, failover, abort, isolate, rate_limit, shutdown); action ledger; safety gates (e.g. two conditions for critical actions); **confidence-based and multi-signal gating** (min confidence, min metrics for critical, optional time persistence)
+- **Operational modes:** Startup, nominal, degraded, fallback, maintenance, test, emergency; mode-aware baselines and thresholds
+- **Evidence & security:** Signed reports (Ed25519/org PKI), hash-chained audit log, evidence manifest, custody (case IDs, operator, redaction), replay (same input → same decision), RBAC, KMS/Vault, encrypted DB and evidence packs
+- **Reports:** HTML, JSON, PDF; “why flagged,” top drivers, “What to do next,” per-metric investigation hints; baseline match level
+- **Integrations:** Formal **HB_EVENT** contract (`schemas/hb_event.json`) for telemetry buses and embedding; WaveOS adapter (HEALTH_EVENT, DRIFT_EVENT, ACTION_REQUEST; ACTION_ACK, MODE_CHANGED, POLICY_APPLIED)
+- **DoD-oriented:** NIST 800-53 / RMF compliance matrix, real-time guarantees doc, formal V&V package (test plan, procedures, acceptance criteria, qualification scenarios), operator trust (confidence, accuracy/FP/FN), product boundary (Core / Runtime / Ops / DoD Package), first-deployment checklist
 
-Sentinel-IV(TM) does not control tests, replace simulators, or modify hardware behavior. It operates as an observer and assurance layer.
+Sentinel-IV(TM) does not control tests, replace simulators, or modify hardware behavior. It operates as an observer and assurance layer; it can recommend or request actions (e.g. via WaveOS) with confidence and multi-signal gating for safety.
 
 ## Market Overview
 
@@ -100,7 +105,9 @@ Additional advisors and contracted contributors will include:
 
 ## Harmony Bridge (Software-Only MVP)
 
-Harmony Bridge is a system-agnostic drift detection layer. It does not run tests; it consumes exported artifacts (Excel/CSV/JSON logs) and compares current runs to baselines.
+Harmony Bridge is a system-agnostic **drift detection and health-assurance layer**. It does not run tests; it consumes exported artifacts (Excel/CSV/JSON, live MQTT/Kafka/syslog) and compares current runs to baselines to detect behavioral drift, produce reports and evidence packs, and (optionally) trigger or recommend actions with confidence-based gating.
+
+**Current state:** Full repo summary and capability list → **`docs/REPO_SUMMARY.md`**. Product status and gaps → **`docs/PRODUCT_STATUS.md`**. DoD production roadmap → **`docs/PRODUCTION_HB_DOD_ROADMAP.md`**.
 
 Operator Quickstart (Local Web UI):
 ```
@@ -160,7 +167,7 @@ open ./output/drift_report.html
 - Local “website” flow:
 ```
 ./bin/hb ui
-# opens http://127.0.0.1:8765
+# opens http://127.0.0.1:8890
 ```
 
 UI: Compare page (minimal but strong)
@@ -194,7 +201,7 @@ Local-only web UI posture (verbatim for README/QUICKSTART):
 ## Local-Only Web UI
 
 The Harmony Bridge UI runs on your machine at:
-http://127.0.0.1:8765
+http://127.0.0.1:8890
 
 - The server binds to localhost only (not accessible externally).
 - No data is uploaded anywhere.
@@ -222,20 +229,46 @@ bin/hb analyze --run runs/no_drift_pass_current
 
 Commands:
 ```
+# Ingest & analyze
 bin/hb ingest --source pba_excel <path-to-file> --run-meta <run_meta.json> --out runs/<run_id>/
 bin/hb analyze --run runs/<run_id>/ --baseline-policy baseline_policy.yaml
 bin/hb run --source pba_excel <path-to-file> --run-meta <run_meta.json>
-bin/hb ui
+bin/hb compare --baseline <path> --run <path> --out <dir>
+bin/hb plan run <plan.yaml>
+
+# Baseline & registry
 bin/hb baseline set <run_id> --tag golden
 bin/hb baseline request <run_id> --tag golden --requested-by "name"
 bin/hb baseline approve <run_id> --tag golden --approved-by "name"
 bin/hb baseline approvals
 bin/hb baseline requests
 bin/hb baseline list
-bin/hb analyze --run runs/<run_id>/ --pdf
-bin/hb analyze --run runs/<run_id>/ --redaction-policy redaction_policy.yaml
 bin/hb runs list --limit 20
-bin/hb ingest --source pba_excel <path-to-file> --run-meta <run_meta.json> --stream
+
+# Streaming, runtime, daemon
+bin/hb runtime --config config/runtime.yaml
+bin/hb daemon
+bin/hb health serve
+
+# Actions (confidence and multi-signal gating via context; use --dry-run to simulate)
+bin/hb actions execute --status FAIL [--dry-run] [--policy config/actions_policy.yaml]
+bin/hb actions list
+bin/hb actions ack <action_id>
+
+# Evidence, replay, support
+bin/hb export evidence-pack [--case <id>] [--redaction-policy ...]
+bin/hb replay --input-slice <path> --baseline <path> --metric-registry <path>
+bin/hb support health
+bin/hb support bundle
+
+# UI & watch
+bin/hb ui
+bin/hb watch --dir <path> --source pba_excel --pattern "*.csv" --interval <sec>
+
+# Optional flags on analyze/run
+bin/hb analyze --run runs/<run_id>/ --pdf
+bin/hb analyze --run runs/<run_id>/ --redaction-policy redaction_policy.yaml --sign-key keys/signing.key --encrypt-key keys/encryption.key
+bin/hb ingest --source pba_excel <path> --run-meta <run_meta.json> --stream
 ```
 
 Exit codes:
@@ -444,6 +477,24 @@ DoD lab offline + secure install:
 - `docs/SECURE_INSTALL.md`
 - `docs/RUNBOOK.md`
 
+Documentation (current state):
+- **`docs/REPO_SUMMARY.md`** — Full summary: what’s implemented, what it can do, quick commands, key docs
+- **`docs/PRODUCT_STATUS.md`** — What the repo can do today vs what’s left for commercial and pilot
+- **`docs/PRODUCTION_HB_DOD_ROADMAP.md`** — DoD production phases (P1–P8), implementation status
+- **`docs/SYSTEM_INTEGRATION.md`** — Hard system integration: HB_EVENT contract, C++/SDK design, telemetry buses
+- **`docs/REALTIME_GUARANTEES.md`** — Latency targets, load testing, backpressure, degradation strategy
+- **`docs/COMPLIANCE_MATRIX.md`** — NIST 800-53 and RMF control mapping for certification
+- **`docs/VV_TEST_PLAN.md`**, **`docs/VV_TEST_PROCEDURES.md`**, **`docs/VV_ACCEPTANCE_CRITERIA.md`** — Formal V&V package
+- **`docs/DECISION_AUTHORITY.md`** — Confidence-based action gating and multi-signal validation
+- **`docs/OPERATOR_TRUST.md`** — Confidence scores, historical accuracy, FP/FN tracking
+- **`docs/WAVEOS_CLOSED_LOOP.md`** — Full HB ↔ WaveOS loop, control hierarchy
+- **`docs/PRODUCT_BOUNDARY.md`** — Product layers: Core, Runtime, Ops, DoD Package
+- **`docs/FIRST_DEPLOYMENT_CHECKLIST.md`** — Checklist for first real deployment
+
+Fault injection (demos / V&V):
+- `hb/inject/faults.py`: time_skew, stuck_at, spike, sensor_drift, duplication
+- Use in tests or replay to simulate telemetry drop, delayed packets, corrupted data, conflicting signals
+
 Tests:
 ```
 pytest -q
@@ -529,7 +580,7 @@ tools/run_sample_cases.sh
 
 ## MVP Acceptance Criteria
 
-Done means:
+Current implementation meets or exceeds:
 - One-command flow works: `bin/hb run --source pba_excel samples/.../input.csv`
 - Creates `mvp/reports/<run_id>/drift_report.html` and `mvp/reports/<run_id>/drift_report.json`
 - Writes `runs.db` and stores run + metrics

@@ -1,0 +1,13 @@
+# Evidence and report retention: tiered retention for long-running programs.
+# retention:
+#   hot_days: 7      # keep full access (no compression)
+#   warm_days: 30    # keep but can compress or move to warm tier
+#   archive_days: 365  # after this, delete or move to cold archive
+
+retention:
+  hot_days: 7
+  warm_days: 30
+  archive_days: 365
+  # After archive_days: delete | archive (archive = move to archive_dir)
+  after_archive: delete  # delete | archive
+  archive_dir: null      # path for archive (e.g. s3 sync target or NFS)

@@ -29,6 +29,12 @@ max_audit_log_mb: 50
 #   window_sec: 60
 #   open_sec: 30
 
+# Backpressure: when buffer exceeds max_events, apply mode (drop | aggregate | degrade). Logged.
+# backpressure:
+#   max_events: 50000
+#   mode: drop
+#   max_metrics: 100   # for degrade mode
+
 # Alert sinks (Week 2): emit on drift/FAIL
 alert_sinks:
   - stdout

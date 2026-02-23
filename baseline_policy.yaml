@@ -28,3 +28,7 @@ baseline_policy:
     - environment_fingerprint
     - sensor_config_id
     - input_data_version
+  # Partial data / missing telemetry: when coverage < min_coverage, apply mode and flag decision.
+  # missing_data:
+  #   mode: ignore   # ignore | degrade | fail
+  #   min_coverage: 0.8

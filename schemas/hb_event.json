@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HB_EVENT — Formal integration event contract",
+  "description": "Contract-based interface for embedding Harmony Bridge into real systems. Use for telemetry buses, embedded systems, test benches, and C++/SDK bindings.",
+  "definitions": {
+    "HB_EVENT": {
+      "type": "object",
+      "required": ["type", "timestamp", "system_id"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["DRIFT_EVENT", "HEALTH_EVENT", "ACTION_REQUEST", "DECISION_SNAPSHOT", "ALERT"]
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC ISO8601 event time"
+        },
+        "system_id": {
+          "type": "string",
+          "description": "Target system or asset identifier"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["info", "low", "medium", "high", "critical"]
+        },
+        "recommended_action": {
+          "type": "string",
+          "description": "Human- or machine-readable action suggestion"
+        },
+        "run_id": { "type": "string" },
+        "decision_id": { "type": "string" },
+        "payload": { "type": "object" }
+      }
+    },
+    "DRIFT_EVENT": {
+      "allOf": [
+        { "$ref": "#/definitions/HB_EVENT" },
+        {
+          "properties": {
+            "type": { "const": "DRIFT_EVENT" },
+            "status": { "type": "string", "enum": ["PASS", "PASS_WITH_DRIFT", "FAIL"] },
+            "drift_metrics": {
+              "type": "array",
+              "items": { "type": "object" }
+            },
+            "report_path": { "type": "string" },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "baseline_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "action_allowed": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "HEALTH_EVENT": {
+      "allOf": [
+        { "$ref": "#/definitions/HB_EVENT" },
+        {
+          "properties": {
+            "type": { "const": "HEALTH_EVENT" },
+            "status": { "type": "string" },
+            "primary_issue": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "ACTION_REQUEST": {
+      "allOf": [
+        { "$ref": "#/definitions/HB_EVENT" },
+        {
+          "properties": {
+            "type": { "const": "ACTION_REQUEST" },
+            "action_type": { "type": "string" },
+            "action_id": { "type": "string" },
+            "confidence": { "type": "number" },
+            "action_allowed": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "DECISION_SNAPSHOT": {
+      "allOf": [
+        { "$ref": "#/definitions/HB_EVENT" },
+        {
+          "properties": {
+            "type": { "const": "DECISION_SNAPSHOT" },
+            "decision": { "type": "string" },
+            "confidence": { "type": "number" },
+            "baseline_confidence": { "type": "number" },
+            "action_allowed": { "type": "boolean" },
+            "config_ref": { "type": "object" },
+            "input_slice_ref": { "type": "object" }
+          }
+        }
+      ]
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/definitions/DRIFT_EVENT" },
+    { "$ref": "#/definitions/HEALTH_EVENT" },
+    { "$ref": "#/definitions/ACTION_REQUEST" },
+    { "$ref": "#/definitions/DECISION_SNAPSHOT" }
+  ]
+}
